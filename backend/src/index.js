@@ -3,13 +3,16 @@
 const express = require('express');
 const cors = require('cors');
 const parser = require('./parser');
+const Evaluador = require('./evaluator');
 
 const app = express();
 const port = 3001;
 
+// MIDDLEWARES
 app.use(cors());
 app.use(express.json());
 
+// ENDPOINT PARA ANALIZAR Y EJECUTAR CODIGO
 app.post('/api/parse', (req, res) => {
     const { code } = req.body;
 
@@ -24,8 +27,17 @@ app.post('/api/parse', (req, res) => {
     };
 
     try {
+        // ANALISIS SINTACTICO CON JISON
         const ast = parser.parse(code);
         resultado.ast = ast;
+        
+        // INTERPRETACION DEL AST
+        const evaluador = new Evaluador();
+        const resultadoEjecucion = evaluador.interpretar(ast);
+        
+        resultado.consoleOutput = resultadoEjecucion.output;
+        resultado.errors.push(...resultadoEjecucion.errors);
+        
     } catch (error) {
         resultado.errors.push({
             type: 'Sintactico',
@@ -38,6 +50,7 @@ app.post('/api/parse', (req, res) => {
     res.json(resultado);
 });
 
+// INICAR SERVIDOR
 app.listen(port, () => {
-    console.log(`Servidor escuchando en http://localhost:${port}`);
+    console.log(`Servidor en http://localhost:${port}`);
 });
