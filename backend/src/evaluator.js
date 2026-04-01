@@ -275,6 +275,51 @@ class Evaluador {
         return null;
     }
 
+    // ----- FUNCIONES DEFINIDAS POR EL USUARIO -----
+    
+    // GUARDAR FUNCION EN EL AMBITO GLOBAL
+    guardarFuncion(funcion) {
+        this.funciones[funcion.nombre] = {
+            nombre: funcion.nombre,
+            params: funcion.params || [],
+            cuerpo: funcion.cuerpo
+        };
+        console.log("Funcion guardada:", funcion.nombre);
+    }
+    
+    // EJECUTAR FUNCION SIN RETORNO
+    ejecutarFuncion(nombre) {
+        const funcion = this.funciones[nombre];
+        if (!funcion) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `Funcion '${nombre}' no definida`
+            });
+            return null;
+        }
+        
+        console.log("Ejecutando funcion:", nombre);
+        
+        // Guardar ambito anterior
+        const ambitoAnterior = this.ambitoActual;
+        
+        // Crear nuevo ambito para la funcion
+        this.ambitoActual = {};
+        
+        // Ejecutar cuerpo de la funcion
+        if (funcion.cuerpo && funcion.cuerpo.sentencias) {
+            for (let sentencia of funcion.cuerpo.sentencias) {
+                this.evaluarDeclaracion(sentencia);
+            }
+        }
+        
+        // Restaurar ambito anterior
+        this.ambitoActual = ambitoAnterior;
+        
+        return null;
+    }
+
+
     // METODO PARA INTERPRETAR CODIGO DIRECTO
     interpretarCodigo(codigo) {
         this.salida = [];
@@ -283,50 +328,86 @@ class Evaluador {
         this.ambitoActual = this.ambitoGlobal;
         this.funciones = {};
         
-        // Extraer el contenido dentro de main()
-        let contenido = codigo;
-        const inicioMain = codigo.indexOf('{');
-        const finMain = codigo.lastIndexOf('}');
+        // Para encontrar todas las funciones declaradas
+        const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\)\s*\{([\s\S]*?)\}/g;
+        let match;
+        let funcionesEncontradas = [];
         
-        if (inicioMain !== -1 && finMain !== -1 && inicioMain < finMain) {
-            contenido = codigo.substring(inicioMain + 1, finMain);
+        while ((match = funcionRegex.exec(codigo)) !== null) {
+            const nombre = match[1];
+            const cuerpo = match[2];
+            funcionesEncontradas.push({ nombre, cuerpo });
+            
+            // Guardar la funcion
+            this.funciones[nombre] = {
+                nombre: nombre,
+                params: [],
+                cuerpo: { type: 'Bloque', sentencias: this.parsearSentencias(cuerpo) }
+            };
         }
         
-        // Procesar cada sentencia
-        let i = 0;
-        while (i < contenido.length) {
-            // Saltar espacios
-            while (i < contenido.length && contenido[i] === ' ') i++;
-            if (i >= contenido.length) break;
-            
-            // Detectar inicio de estructura
-            if (contenido.substring(i, i + 2) === 'if') {
-                i = this.procesarIf(contenido, i);
-            } else if (contenido.substring(i, i + 3) === 'for') {
-                i = this.procesarFor(contenido, i);
-            } else if (contenido.substring(i, i + 6) === 'switch') {
-                i = this.procesarSwitch(contenido, i);
-            } else {
-                // Buscar hasta el siguiente punto y coma
-                let j = i;
-                let inString = false;
-                while (j < contenido.length) {
-                    if (contenido[j] === '"') inString = !inString;
-                    if (contenido[j] === ';' && !inString) break;
-                    j++;
-                }
-                let sentencia = contenido.substring(i, j).trim();
-                i = j + 1;
-                if (sentencia) {
-                    this.procesarLineaSimple(sentencia);
-                }
-            }
+        // Para encontrar y ejecutar el main
+        const mainMatch = codigo.match(/func\s+main\s*\(\s*\)\s*\{([\s\S]*)\}/);
+        if (mainMatch) {
+            const contenido = mainMatch[1];
+            this.ejecutarBloqueSimple(contenido);
         }
         
         return {
             output: this.salida,
             errors: this.errores
         };
+    }
+    
+    // CONVERTIR UN STRING DE CODIGO EN UN ARRAY DE SENTENCIAS
+    parsearSentencias(codigo) {
+        const sentencias = [];
+        let current = '';
+        let i = 0;
+        let inString = false;
+        
+        while (i < codigo.length) {
+            const char = codigo[i];
+            if (char === '"') {
+                inString = !inString;
+                current += char;
+            } else if (char === ';' && !inString) {
+                if (current.trim()) {
+                    sentencias.push({ type: 'LineaSimple', valor: current.trim() });
+                }
+                current = '';
+            } else {
+                current += char;
+            }
+            i++;
+        }
+        
+        if (current.trim()) {
+            sentencias.push({ type: 'LineaSimple', valor: current.trim() });
+        }
+        
+        return sentencias;
+    }
+    
+    // EJECUTAR BLOQUE SIMPLE DE CODIGO (SIN AST)
+    ejecutarBloqueSimple(bloque) {
+        const sentencias = bloque.split(';');
+        
+        for (let sentencia of sentencias) {
+            let linea = sentencia.trim();
+            if (linea === '') continue;
+            
+            // Detectar llamada a funcion
+            const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)$/);
+            if (llamadaMatch) {
+                const nombreFunc = llamadaMatch[1];
+                this.ejecutarFuncion(nombreFunc);
+                continue;
+            }
+            
+            // Procesar linea normal
+            this.procesarLineaSimple(linea);
+        }
     }
     
     // PROCESAR UNA SENTENCIA IF
@@ -549,6 +630,14 @@ class Evaluador {
     procesarLineaSimple(linea) {
         if (linea === '') return;
         
+        // Llamada a funcion sin parametros
+        const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)$/);
+        if (llamadaMatch) {
+            const nombreFunc = llamadaMatch[1];
+            this.ejecutarFuncion(nombreFunc);
+            return;
+        }
+
         // Declaracion var x int = 10
         let match = linea.match(/var\s+([a-z]+)\s+int\s*=\s*([0-9]+)/);
         if (match) {
