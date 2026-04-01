@@ -2,7 +2,6 @@
 
 const express = require('express');
 const cors = require('cors');
-const parser = require('./parser');
 const Evaluador = require('./evaluator');
 
 const app = express();
@@ -16,6 +15,8 @@ app.use(express.json());
 app.post('/api/parse', (req, res) => {
     const { code } = req.body;
 
+    console.log("Codigo recibido:", code);
+
     if (!code) {
         return res.status(400).json({ error: 'No hay codigo para analizar' });
     }
@@ -27,30 +28,29 @@ app.post('/api/parse', (req, res) => {
     };
 
     try {
-        // ANALISIS SINTACTICO CON JISON
-        const ast = parser.parse(code);
-        resultado.ast = ast;
-        
-        // INTERPRETACION DEL AST
         const evaluador = new Evaluador();
-        const resultadoEjecucion = evaluador.interpretar(ast);
+        const resultadoEjecucion = evaluador.interpretarCodigo(code);
+        
+        console.log("Resultado ejecucion:", resultadoEjecucion);
         
         resultado.consoleOutput = resultadoEjecucion.output;
-        resultado.errors.push(...resultadoEjecucion.errors);
+        resultado.errors = resultadoEjecucion.errors;
         
     } catch (error) {
+        console.log("Error:", error);
         resultado.errors.push({
-            type: 'Sintactico',
-            line: error.location?.first_line || 0,
-            column: error.location?.first_column || 0,
+            type: 'Error',
+            line: 0,
+            column: 0,
             description: error.message
         });
     }
 
+    console.log("Respuesta:", resultado);
     res.json(resultado);
 });
 
-// INICAR SERVIDOR
+// INICIAR SERVIDOR
 app.listen(port, () => {
     console.log(`Servidor en http://localhost:${port}`);
 });

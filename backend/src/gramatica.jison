@@ -1,269 +1,210 @@
 /* ANALIZADOR LEXICO Y SINTACTICO */
-%lex
 
+%lex
 %%
 
 // --- REGLAS LEXICAS ---
-\s+                   /* ignorar espacios en blanco */
-\/\/[^\n]*            /* ignorar comentarios de una linea */
-\/\*[^*]*\*+\/([^*/][^*]*\*+\/)*  /* ignorar comentarios multilinea */
+\s+                   /* ignorar espacios */
+\/\/[^\n]*            /* comentario una linea */
+\/\*[^*]*\*+\/([^*/][^*]*\*+\/)*  /* comentario multilinea */
 
 // PALABRAS RESERVADAS
-"func"                return 'FUNC';
-"var"                 return 'VAR';
-"if"                  return 'IF';
-"else"                return 'ELSE';
-"for"                 return 'FOR';
-"return"              return 'RETURN';
-"switch"              return 'SWITCH';
-"case"                return 'CASE';
-"default"             return 'DEFAULT';
-"break"               return 'BREAK';
-"continue"            return 'CONTINUE';
-"struct"              return 'STRUCT';
-"true"                return 'TRUE';
-"false"               return 'FALSE';
-"nil"                 return 'NIL';
+"func"                return 'FUNC'
+"var"                 return 'VAR'
+"if"                  return 'IF'
+"else"                return 'ELSE'
+"for"                 return 'FOR'
+"return"              return 'RETURN'
+"switch"              return 'SWITCH'
+"case"                return 'CASE'
+"default"             return 'DEFAULT'
+"break"               return 'BREAK'
+"continue"            return 'CONTINUE'
+"struct"              return 'STRUCT'
+"true"                return 'TRUE'
+"false"               return 'FALSE'
+"nil"                 return 'NIL'
 
 // OPERADORES Y SIGNOS
-"+"                   return 'SUMA';
-"-"                   return 'RESTA';
-"*"                   return 'MULTIPLICACION';
-"/"                   return 'DIVISION';
-"%"                   return 'MODULO';
-"=="                  return 'IGUAL_IGUAL';
-"!="                  return 'DIFERENTE';
-">"                   return 'MAYOR';
-"<"                   return 'MENOR';
-">="                  return 'MAYOR_IGUAL';
-"<="                  return 'MENOR_IGUAL';
-"&&"                  return 'AND';
-"||"                  return 'OR';
-"!"                   return 'NOT';
-"="                   return 'ASIGNACION';
-"+="                  return 'MAS_IGUAL';
-"-="                  return 'MENOS_IGUAL';
-"("                   return 'PAREN_IZQ';
-")"                   return 'PAREN_DER';
-"{"                   return 'LLAVE_IZQ';
-"}"                   return 'LLAVE_DER';
-"["                   return 'CORCH_IZQ';
-"]"                   return 'CORCH_DER';
-","                   return 'COMA';
-";"                   return 'PUNTOCOMA';
-":"                   return 'DOS_PUNTOS';
-"."                   return 'PUNTO';
+"+"                   return 'SUMA'
+"-"                   return 'RESTA'
+"*"                   return 'MULT'
+"/"                   return 'DIV'
+"%"                   return 'MOD'
+"=="                  return 'IGUAL'
+"!="                  return 'DIFERENTE'
+">"                   return 'MAYOR'
+"<"                   return 'MENOR'
+">="                  return 'MAYORIGUAL'
+"<="                  return 'MENORIGUAL'
+"&&"                  return 'AND'
+"||"                  return 'OR'
+"!"                   return 'NOT'
+"="                   return 'ASIGN'
+"+="                  return 'MASIGUAL'
+"-="                  return 'MENOSIGUAL'
+"("                   return 'PARENIZQ'
+")"                   return 'PARENDER'
+"{"                   return 'LLAVEIZQ'
+"}"                   return 'LLAVEDER'
+"["                   return 'CORCHIZQ'
+"]"                   return 'CORCHDER'
+","                   return 'COMA'
+";"                   return 'PUNTOCOMA'
+":"                   return 'DOSPUNTOS'
+"."                   return 'PUNTO'
+
+"int"                 return 'INT'
+"float64"             return 'FLOAT64'
+"string"              return 'STRING'
+"bool"                return 'BOOL'
+"rune"                return 'RUNE'
 
 // IDENTIFICADORES Y LITERALES
-[a-zA-Z_][a-zA-Z0-9_]*  return 'IDENTIFICADOR';
-[0-9]+                return 'ENTERO';
-[0-9]+\.[0-9]+        return 'FLOTANTE';
-\"(\\.|[^"\\])*\"     return 'CADENA';
-\'(\\.|[^'\\])*\'     return 'CARACTER';
+[a-zA-Z_][a-zA-Z0-9_]*  return 'IDENTIFICADOR'
+[0-9]+                return 'ENTERO'
+[0-9]+\.[0-9]+        return 'FLOTANTE'
+\"(\\.|[^"\\])*\"     return 'CADENA'
+\'(\\.|[^'\\])*\'     return 'CARACTER'
 
-// MANEJO DE ERRORES LEXICOS
-.                     return 'LEXICO_ERROR';
+.                     return 'ERROR'
 
 /lex
 
-%start Programa
+%start programa
 
 %%
 
-
 // --- REGLAS SINTACTICAS ---
 
-Programa
-    : ListaDeclaraciones
+programa
+    : lista_declaraciones
     ;
 
-ListaDeclaraciones
-    : Declaracion ListaDeclaraciones
-    | /* vacio */
+lista_declaraciones
+    : declaracion lista_declaraciones
+    |
     ;
 
-Declaracion
-    : DeclaracionStruct
-    | DeclaracionFuncion
-    | Sentencia
+declaracion
+    : funcion
     ;
 
-DeclaracionStruct
-    : STRUCT IDENTIFICADOR LLAVE_IZQ ListaAtributosStruct LLAVE_DER
+funcion
+    : FUNC IDENTIFICADOR PARENIZQ lista_parametros PARENDER tipo_op LLAVEIZQ lista_sentencias LLAVEDER
     ;
 
-ListaAtributosStruct
-    : Tipo IDENTIFICADOR PUNTOCOMA ListaAtributosStruct
-    | /* vacio */
+lista_parametros
+    : parametro COMA lista_parametros
+    | parametro
+    |
     ;
 
-DeclaracionFuncion
-    : FUNC IDENTIFICADOR PAREN_IZQ ListaParametros PAREN_DER TipoOpt LLAVE_IZQ ListaSentencias LLAVE_DER
+parametro
+    : IDENTIFICADOR tipo
     ;
 
-TipoOpt
-    : Tipo
-    | /* vacio */
+tipo_op
+    : tipo
+    |
     ;
 
-Tipo
-    : "int"
-    | "float64"
-    | "string"
-    | "bool"
-    | "rune"
-    | CORCH_IZQ CORCH_DER Tipo  // Para slices -> []int
-    | IDENTIFICADOR              // Para structs
+tipo
+    : INT
+    | FLOAT64
+    | STRING
+    | BOOL
+    | RUNE
+    | IDENTIFICADOR             // Para structs
+    | CORCHIZQ CORCHDER tipo    //Para slices -> []int
     ;
 
-ListaParametros
-    : Parametro COMA ListaParametros
-    | Parametro
-    | /* vacio */
+lista_sentencias
+    : sentencia lista_sentencias
+    |
     ;
 
-Parametro
-    : IDENTIFICADOR Tipo
+sentencia
+    : declaracion_variable
+    | asignacion
+    | llamada_funcion PUNTOCOMA?
+    | bloque
     ;
 
-ListaSentencias
-    : Sentencia ListaSentencias
-    | /* vacio */
+bloque
+    : LLAVEIZQ lista_sentencias LLAVEDER
     ;
 
-Sentencia
-    : DeclaracionVariable
-    | Asignacion
-    | IfSentencia
-    | ForSentencia
-    | SwitchSentencia
-    | BreakSentencia
-    | ContinueSentencia
-    | ReturnSentencia
-    | LlamadaFuncion
-    | Bloque
+declaracion_variable
+    : VAR IDENTIFICADOR tipo ASIGN expresion PUNTOCOMA?
+    | VAR IDENTIFICADOR tipo PUNTOCOMA?
+    | IDENTIFICADOR DOSPUNTOS ASIGN expresion PUNTOCOMA?
     ;
 
-DeclaracionVariable
-    : VAR IDENTIFICADOR Tipo ASIGNACION Expresion PUNTOCOMA?
-    | VAR IDENTIFICADOR Tipo PUNTOCOMA?
-    | IDENTIFICADOR DOS_PUNTOS ASIGNACION Expresion PUNTOCOMA?
+asignacion
+    : IDENTIFICADOR operador_asign expresion PUNTOCOMA?
     ;
 
-Asignacion
-    : IDENTIFICADOR OperadorAsignacion Expresion PUNTOCOMA?
+operador_asign
+    : ASIGN
+    | MASIGUAL
+    | MENOSIGUAL
     ;
 
-OperadorAsignacion
-    : ASIGNACION
-    | MAS_IGUAL
-    | MENOS_IGUAL
+llamada_funcion
+    : IDENTIFICADOR PARENIZQ lista_argumentos PARENDER
     ;
 
-IfSentencia
-    : IF Expresion Bloque ElseOpt
+lista_argumentos
+    : expresion COMA lista_argumentos
+    | expresion
+    |
     ;
 
-ElseOpt
-    : ELSE Bloque
-    | ELSE IfSentencia
-    | /* vacio */
+expresion
+    : expresion_logica
     ;
 
-ForSentencia
-    : FOR Expresion Bloque
-    | FOR Asignacion PUNTOCOMA? Expresion PUNTOCOMA? Asignacion Bloque
+expresion_logica
+    : expresion_igualdad
+    | expresion_logica AND expresion_igualdad
+    | expresion_logica OR expresion_igualdad
     ;
 
-SwitchSentencia
-    : SWITCH Expresion LLAVE_IZQ ListaCases LLAVE_DER
+expresion_igualdad
+    : expresion_relacional
+    | expresion_igualdad IGUAL expresion_relacional
+    | expresion_igualdad DIFERENTE expresion_relacional
     ;
 
-ListaCases
-    : Case ListaCases
-    | /* vacio */
+expresion_relacional
+    : expresion_aditiva
+    | expresion_relacional MAYOR expresion_aditiva
+    | expresion_relacional MENOR expresion_aditiva
+    | expresion_relacional MAYORIGUAL expresion_aditiva
+    | expresion_relacional MENORIGUAL expresion_aditiva
     ;
 
-Case
-    : CASE Expresion DOS_PUNTOS ListaSentencias
-    | DEFAULT DOS_PUNTOS ListaSentencias
+expresion_aditiva
+    : expresion_multiplicativa
+    | expresion_aditiva SUMA expresion_multiplicativa
+    | expresion_aditiva RESTA expresion_multiplicativa
     ;
 
-BreakSentencia
-    : BREAK PUNTOCOMA?
+expresion_multiplicativa
+    : expresion_unaria
+    | expresion_multiplicativa MULT expresion_unaria
+    | expresion_multiplicativa DIV expresion_unaria
+    | expresion_multiplicativa MOD expresion_unaria
     ;
 
-ContinueSentencia
-    : CONTINUE PUNTOCOMA?
+expresion_unaria
+    : expresion_primaria
+    | NOT expresion_primaria
+    | RESTA expresion_primaria
     ;
 
-ReturnSentencia
-    : RETURN ExpresionOpt PUNTOCOMA?
-    ;
-
-ExpresionOpt
-    : Expresion
-    | /* vacio */
-    ;
-
-Bloque
-    : LLAVE_IZQ ListaSentencias LLAVE_DER
-    ;
-
-LlamadaFuncion
-    : IDENTIFICADOR PAREN_IZQ ListaArgumentos PAREN_DER PUNTOCOMA?
-    ;
-
-ListaArgumentos
-    : Expresion COMA ListaArgumentos
-    | Expresion
-    | /* vacio */
-    ;
-
-Expresion
-    : ExpresionLogica
-    ;
-
-ExpresionLogica
-    : ExpresionIgualdad
-    | ExpresionIgualdad AND ExpresionIgualdad
-    | ExpresionIgualdad OR ExpresionIgualdad
-    ;
-
-ExpresionIgualdad
-    : ExpresionRelacional
-    | ExpresionRelacional IGUAL_IGUAL ExpresionRelacional
-    | ExpresionRelacional DIFERENTE ExpresionRelacional
-    ;
-
-ExpresionRelacional
-    : ExpresionAditiva
-    | ExpresionAditiva MAYOR ExpresionAditiva
-    | ExpresionAditiva MENOR ExpresionAditiva
-    | ExpresionAditiva MAYOR_IGUAL ExpresionAditiva
-    | ExpresionAditiva MENOR_IGUAL ExpresionAditiva
-    ;
-
-ExpresionAditiva
-    : ExpresionMultiplicativa
-    | ExpresionAditiva SUMA ExpresionMultiplicativa
-    | ExpresionAditiva RESTA ExpresionMultiplicativa
-    ;
-
-ExpresionMultiplicativa
-    : ExpresionUnaria
-    | ExpresionMultiplicativa MULTIPLICACION ExpresionUnaria
-    | ExpresionMultiplicativa DIVISION ExpresionUnaria
-    | ExpresionMultiplicativa MODULO ExpresionUnaria
-    ;
-
-ExpresionUnaria
-    : ExpresionPrimaria
-    | NOT ExpresionPrimaria
-    | RESTA ExpresionPrimaria
-    ;
-
-ExpresionPrimaria
+expresion_primaria
     : ENTERO
     | FLOTANTE
     | CADENA
@@ -272,17 +213,8 @@ ExpresionPrimaria
     | FALSE
     | NIL
     | IDENTIFICADOR
-    | LlamadaFuncion
-    | PAREN_IZQ Expresion PAREN_DER
-    | CORCH_IZQ ListaElementos CORCH_DER   // Para slices literales, -> []int{1,2,3}
-    | CORCH_IZQ CORCH_DER Tipo LLAVE_IZQ ListaElementos LLAVE_DER  // Otro slice literal
-    | IDENTIFICADOR PUNTO IDENTIFICADOR    // Acceso a atributo de struct
-    ;
-
-ListaElementos
-    : Expresion COMA ListaElementos
-    | Expresion
-    | /* vacio */
+    | llamada_funcion
+    | PARENIZQ expresion PARENDER
     ;
 
 %%
