@@ -275,6 +275,7 @@ class Evaluador {
         return null;
     }
 
+
     // ----- FUNCIONES DEFINIDAS POR EL USUARIO -----
     
     // GUARDAR FUNCION EN EL AMBITO GLOBAL
@@ -319,6 +320,76 @@ class Evaluador {
         return null;
     }
 
+    
+    // ----- METODOS CONS PARAMETROS -----
+    
+    // EXTRAER PARAMETROS DE UNA DECLARACION DE FUNCION
+    extraerParametros(paramsStr) {
+        const params = [];
+        if (!paramsStr || paramsStr.trim() === '') return params;
+        
+        const paramList = paramsStr.split(',');
+        for (let param of paramList) {
+            const partes = param.trim().split(/\s+/);
+            if (partes.length === 2) {
+                params.push({
+                    nombre: partes[0],
+                    tipo: partes[1]
+                });
+            }
+        }
+        return params;
+    }
+    
+    // EJECUTAR FUNCION CON PARAMETROS
+    ejecutarFuncionConParams(nombre, args) {
+        const funcion = this.funciones[nombre];
+        
+        if (!funcion) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `Funcion '${nombre}' no definida`
+            });
+            return null;
+        }
+        
+        // Guardar ambito anterior
+        const ambitoAnterior = this.ambitoActual;
+        
+        // Crear nuevo ambito con los parametros
+        const nuevoAmbito = {};
+        for (let i = 0; i < funcion.params.length; i++) {
+            const param = funcion.params[i];
+            let valorArg = args[i].trim();
+            
+            if (valorArg.match(/^[0-9]+$/)) {
+                valorArg = parseInt(valorArg);
+            } else if (ambitoAnterior[valorArg]) {
+                valorArg = ambitoAnterior[valorArg].valor;
+            } else {
+                valorArg = this.evaluarExpresionSimpleConVariables(valorArg);
+            }
+            nuevoAmbito[param.nombre] = { valor: valorArg, tipo: param.tipo };
+        }
+        
+        this.ambitoActual = nuevoAmbito;
+        
+        // Ejecutar cuerpo de la funcion
+        if (funcion.cuerpo && funcion.cuerpo.sentencias) {
+            for (let sentencia of funcion.cuerpo.sentencias) {
+                if (sentencia.type === 'LineaSimple') {
+                    this.procesarLineaSimple(sentencia.valor);
+                } else {
+                    this.evaluarDeclaracion(sentencia);
+                }
+            }
+        }
+        
+        // Restaurar ambito anterior
+        this.ambitoActual = ambitoAnterior;
+        
+        return null;
+    }
 
     // METODO PARA INTERPRETAR CODIGO DIRECTO
     interpretarCodigo(codigo) {
@@ -328,29 +399,32 @@ class Evaluador {
         this.ambitoActual = this.ambitoGlobal;
         this.funciones = {};
         
-        // Para encontrar todas las funciones declaradas
-        const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\)\s*\{([\s\S]*?)\}/g;
-        let match;
-        let funcionesEncontradas = [];
+        // Para limpiar el codigo: eliminar saltos de linea y espacios extras
+        let codigoLimpio = codigo.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
         
-        while ((match = funcionRegex.exec(codigo)) !== null) {
+        // Buscar funciones: func nombre(parametros)
+        const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*\{([^}]*)\}/g;
+        let match;
+        
+        while ((match = funcionRegex.exec(codigoLimpio)) !== null) {
             const nombre = match[1];
-            const cuerpo = match[2];
-            funcionesEncontradas.push({ nombre, cuerpo });
+            const paramsStr = match[2];
+            const cuerpo = match[3];
             
-            // Guardar la funcion
             this.funciones[nombre] = {
                 nombre: nombre,
-                params: [],
+                params: this.extraerParametros(paramsStr),
                 cuerpo: { type: 'Bloque', sentencias: this.parsearSentencias(cuerpo) }
             };
         }
         
-        // Para encontrar y ejecutar el main
-        const mainMatch = codigo.match(/func\s+main\s*\(\s*\)\s*\{([\s\S]*)\}/);
+        // Buscar y ejecutar main
+        const mainMatch = codigoLimpio.match(/func\s+main\s*\(\s*\)\s*\{([^}]*)\}/);
         if (mainMatch) {
             const contenido = mainMatch[1];
             this.ejecutarBloqueSimple(contenido);
+        } else {
+            console.log("No se encontro funcion main");
         }
         
         return {
@@ -398,10 +472,12 @@ class Evaluador {
             if (linea === '') continue;
             
             // Detectar llamada a funcion
-            const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)$/);
+            const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*([^)]*)\s*\)$/);
             if (llamadaMatch) {
                 const nombreFunc = llamadaMatch[1];
-                this.ejecutarFuncion(nombreFunc);
+                const argsStr = llamadaMatch[2].trim();
+                const args = argsStr ? argsStr.split(',').map(a => a.trim()) : [];
+                this.ejecutarFuncionConParams(nombreFunc, args);
                 continue;
             }
             
@@ -630,11 +706,13 @@ class Evaluador {
     procesarLineaSimple(linea) {
         if (linea === '') return;
         
-        // Llamada a funcion sin parametros
-        const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)$/);
+        // Llamada a funcion con parametros
+        const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*([^)]*)\s*\)$/);
         if (llamadaMatch) {
             const nombreFunc = llamadaMatch[1];
-            this.ejecutarFuncion(nombreFunc);
+            const argsStr = llamadaMatch[2].trim();
+            const args = argsStr ? argsStr.split(',').map(a => a.trim()) : [];
+            this.ejecutarFuncionConParams(nombreFunc, args);
             return;
         }
 
@@ -672,7 +750,6 @@ class Evaluador {
         match = linea.match(/([a-z]+)\s*\+=\s*([0-9]+)/);
         if (match) {
             if (this.ambitoActual[match[1]]) {
-                let viejo = this.ambitoActual[match[1]].valor;
                 this.ambitoActual[match[1]].valor += parseInt(match[2]);
             }
             return;
@@ -683,6 +760,8 @@ class Evaluador {
             const printMatch = linea.match(/fmt\.Println\((.*)\)/);
             if (printMatch) {
                 let args = printMatch[1];
+                
+                // Verificar si tiene comas (multiples argumentos)
                 let tieneMultiples = false;
                 let inStr = false;
                 for (let k = 0; k < args.length; k++) {
@@ -703,16 +782,102 @@ class Evaluador {
                     }).join(' ');
                     this.salida.push(texto);
                 } else {
-                    const resultado = this.evaluarExpresionSimple(args);
-                    if (typeof resultado === 'string' && resultado.startsWith('"') && resultado.endsWith('"')) {
-                        this.salida.push(resultado.slice(1, -1));
-                    } else {
-                        this.salida.push(String(resultado));
-                    }
+                    // Evaluar la expresion completa (puede ser a + b)
+                    const resultado = this.evaluarExpresionSimpleConVariables(args);
+                    this.salida.push(String(resultado));
                 }
             }
             return;
         }
+    }
+
+    // EVALUAR EXPRESION SIMPLE CON VARIABLES DEL AMBITO ACTUAL
+    evaluarExpresionSimpleConVariables(expr) {
+        expr = expr.trim();
+        
+        if (expr.match(/^".*"$/)) {
+            return expr;
+        }
+        
+        if (expr.match(/^[0-9]+$/)) {
+            return parseInt(expr);
+        }
+        
+        if (this.ambitoActual[expr]) {
+            return this.ambitoActual[expr].valor;
+        }
+        
+        if (this.ambitoGlobal[expr]) {
+            return this.ambitoGlobal[expr].valor;
+        }
+        
+        const resultadoMultDiv = this.resolverMultiplicacionDivisionConVariables(expr);
+        const resultadoFinal = this.resolverSumaRestaConVariables(resultadoMultDiv);
+        return resultadoFinal;
+    }
+    
+    // Resolver multiplicacion y division con variables
+    resolverMultiplicacionDivisionConVariables(expresion) {
+        const tokens = expresion.split(/([\+\-\*\/])/);
+        const resultado = [];
+        
+        for (let i = 0; i < tokens.length; i++) {
+            let token = tokens[i].trim();
+            if (token === '*' || token === '/') {
+                const izquierda = this.obtenerValorTokenConVariables(resultado.pop());
+                const derecha = this.obtenerValorTokenConVariables(tokens[i+1].trim());
+                if (token === '*') {
+                    resultado.push(izquierda * derecha);
+                } else if (token === '/') {
+                    if (derecha === 0) {
+                        this.errores.push({ type: 'Semantico', description: 'Division por cero' });
+                        resultado.push(0);
+                    } else {
+                        resultado.push(izquierda / derecha);
+                    }
+                }
+                i++;
+            } else {
+                resultado.push(token);
+            }
+        }
+        return resultado;
+    }
+    
+    // Resolver suma y resta con variables
+    resolverSumaRestaConVariables(partes) {
+        let resultado = this.obtenerValorTokenConVariables(partes[0]);
+        
+        for (let i = 1; i < partes.length; i++) {
+            let op = partes[i];
+            let valor = this.obtenerValorTokenConVariables(partes[i+1]);
+            if (op === '+') {
+                resultado += valor;
+            } else if (op === '-') {
+                resultado -= valor;
+            }
+            i++;
+        }
+        return resultado;
+    }
+    
+    // Obtener valor de token con variables del ambito actual
+    obtenerValorTokenConVariables(token) {
+        if (typeof token === 'number') return token;
+        token = String(token).trim();
+        if (token.match(/^".*"$/)) {
+            return token;
+        }
+        if (token.match(/^[0-9]+$/)) {
+            return parseInt(token);
+        }
+        if (this.ambitoActual[token]) {
+            return this.ambitoActual[token].valor;
+        }
+        if (this.ambitoGlobal[token]) {
+            return this.ambitoGlobal[token].valor;
+        }
+        return 0;
     }
     
     // --- METODOS AUXILIARES PARA EVALUAR EXPRESIONES ---
