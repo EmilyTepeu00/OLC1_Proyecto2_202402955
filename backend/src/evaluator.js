@@ -391,6 +391,80 @@ class Evaluador {
         return null;
     }
 
+    // EJECUTAR FUNCION CON PARAMETROS Y RETORNO
+    ejecutarFuncionConRetorno(nombre, args) {
+        const funcion = this.funciones[nombre];
+        if (!funcion) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `Funcion '${nombre}' no definida`
+            });
+            return null;
+        }
+        
+        // Validar cantidad de parametros
+        if (funcion.params.length !== args.length) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `Funcion '${nombre}' espera ${funcion.params.length} parametros, recibio ${args.length}`
+            });
+            return null;
+        }
+        
+        // Guardar ambito anterior
+        const ambitoAnterior = this.ambitoActual;
+        
+        // Crear nuevo ambito con los parametros
+        const nuevoAmbito = {};
+        for (let i = 0; i < funcion.params.length; i++) {
+            const param = funcion.params[i];
+            let valorArg = args[i].trim();
+            
+            if (valorArg.match(/^[0-9]+$/)) {
+                valorArg = parseInt(valorArg);
+            } else if (ambitoAnterior[valorArg]) {
+                valorArg = ambitoAnterior[valorArg].valor;
+            } else {
+                valorArg = this.evaluarExpresionSimpleConVariables(valorArg);
+            }
+            nuevoAmbito[param.nombre] = { valor: valorArg, tipo: param.tipo };
+        }
+        
+        this.ambitoActual = nuevoAmbito;
+        
+        // Ejecutar cuerpo de la funcion y capturar return
+        let resultadoRetorno = null;
+        if (funcion.cuerpo && funcion.cuerpo.sentencias) {
+            for (let sentencia of funcion.cuerpo.sentencias) {
+                if (sentencia.type === 'LineaSimple') {
+                    const lineaValor = sentencia.valor;
+                    // Verificar si es un return
+                    if (lineaValor.startsWith('return')) {
+                        const returnMatch = lineaValor.match(/return\s*(.*)/);
+                        if (returnMatch) {
+                            const valorReturn = returnMatch[1] ? returnMatch[1].trim() : null;
+                            if (valorReturn) {
+                                resultadoRetorno = this.evaluarExpresionSimpleConVariables(valorReturn);
+                            } else {
+                                resultadoRetorno = null;
+                            }
+                            break;
+                        }
+                    } else {
+                        this.procesarLineaSimple(lineaValor);
+                    }
+                } else {
+                    this.evaluarDeclaracion(sentencia);
+                }
+            }
+        }
+        
+        // Restaurar ambito anterior
+        this.ambitoActual = ambitoAnterior;
+        
+        return resultadoRetorno;
+    }
+
     // METODO PARA INTERPRETAR CODIGO DIRECTO
     interpretarCodigo(codigo) {
         this.salida = [];
@@ -403,17 +477,19 @@ class Evaluador {
         let codigoLimpio = codigo.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
         
         // Buscar funciones: func nombre(parametros)
-        const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*\{([^}]*)\}/g;
+        const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*([a-zA-Z0-9_]*)?\s*\{([^}]*)\}/g;
         let match;
         
         while ((match = funcionRegex.exec(codigoLimpio)) !== null) {
             const nombre = match[1];
             const paramsStr = match[2];
-            const cuerpo = match[3];
+            const tipoRetorno = match[3] || null;
+            const cuerpo = match[4];
             
             this.funciones[nombre] = {
                 nombre: nombre,
                 params: this.extraerParametros(paramsStr),
+                tipoRetorno: tipoRetorno,
                 cuerpo: { type: 'Bloque', sentencias: this.parsearSentencias(cuerpo) }
             };
         }
@@ -471,13 +547,25 @@ class Evaluador {
             let linea = sentencia.trim();
             if (linea === '') continue;
             
-            // Detectar llamada a funcion
+            // Detectar llamada a funcion con asignacion (ej: resultado := sumar(5, 3))
+            const asignacionFuncMatch = linea.match(/([a-z]+)\s*:=\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*([^)]*)\s*\)/);
+            if (asignacionFuncMatch) {
+                const varNombre = asignacionFuncMatch[1];
+                const nombreFunc = asignacionFuncMatch[2];
+                const argsStr = asignacionFuncMatch[3].trim();
+                const args = argsStr ? argsStr.split(',').map(a => a.trim()) : [];
+                const resultado = this.ejecutarFuncionConRetorno(nombreFunc, args);
+                this.ambitoActual[varNombre] = { valor: resultado, tipo: 'int' };
+                continue;
+            }
+            
+            // Detectar llamada a funcion normal (con o sin parametros)
             const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*([^)]*)\s*\)$/);
             if (llamadaMatch) {
                 const nombreFunc = llamadaMatch[1];
                 const argsStr = llamadaMatch[2].trim();
                 const args = argsStr ? argsStr.split(',').map(a => a.trim()) : [];
-                this.ejecutarFuncionConParams(nombreFunc, args);
+                this.ejecutarFuncionConRetorno(nombreFunc, args);
                 continue;
             }
             
@@ -705,6 +793,11 @@ class Evaluador {
     // PROCESAR UNA LINEA SIMPLE (variables, asignaciones, fmt.Println)
     procesarLineaSimple(linea) {
         if (linea === '') return;
+
+        // Ignorar lineas que son return
+        if (linea.startsWith('return')) {
+            return;
+        }
         
         // Llamada a funcion con parametros
         const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*([^)]*)\s*\)$/);
