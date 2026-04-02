@@ -465,6 +465,27 @@ class Evaluador {
         return resultadoRetorno;
     }
 
+    // ----- SLICES (ARRAYS DINAMICOS) -----
+
+    // CREAR SLICE
+    crearSlice(tipo, elementos) {
+        return {
+            tipo: 'slice',
+            tipoElemento: tipo,
+            elementos: elementos || []
+        };
+    }
+    
+    // CONVERTIR SLICE A STRING PARA IMPRIMIR
+    sliceToString(slice) {
+        if (!slice || slice.tipo !== 'slice') {
+            return 'nil';
+        }
+        const elementosStr = slice.elementos.map(e => String(e)).join(', ');
+        return `[${elementosStr}]`;
+    }
+
+
     // METODO PARA INTERPRETAR CODIGO DIRECTO
     interpretarCodigo(codigo) {
         this.salida = [];
@@ -793,9 +814,32 @@ class Evaluador {
     // PROCESAR UNA LINEA SIMPLE (variables, asignaciones, fmt.Println)
     procesarLineaSimple(linea) {
         if (linea === '') return;
-
+        
         // Ignorar lineas que son return
         if (linea.startsWith('return')) {
+            return;
+        }
+
+        // CREACION DE SLICE: []int(1, 2, 3)
+        const sliceMatch = linea.match(/\[\](\w+)\{([^}]*)\}/);
+        if (sliceMatch) {
+            const tipo = sliceMatch[1];
+            const elementosStr = sliceMatch[2].trim();
+            const elementos = elementosStr ? elementosStr.split(',').map(e => {
+                const val = e.trim();
+                if (val.match(/^[0-9]+$/)) {
+                    return parseInt(val);
+                }
+                return val;
+            }) : [];
+            const slice = this.crearSlice(tipo, elementos);
+            
+            // Verificar si es asignacion a variable: numeros := []int{1,2,3}
+            const asignacionMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*\[\](\w+)\{([^}]*)\}/);
+            if (asignacionMatch) {
+                const varNombre = asignacionMatch[1];
+                this.ambitoActual[varNombre] = { valor: slice, tipo: 'slice' };
+            }
             return;
         }
         
@@ -854,7 +898,7 @@ class Evaluador {
             if (printMatch) {
                 let args = printMatch[1];
                 
-                // Verificar si tiene comas (multiples argumentos)
+                // Verificar si tiene comas
                 let tieneMultiples = false;
                 let inStr = false;
                 for (let k = 0; k < args.length; k++) {
@@ -871,13 +915,23 @@ class Evaluador {
                         if (typeof v === 'string' && v.startsWith('"') && v.endsWith('"')) {
                             return v.slice(1, -1);
                         }
+                        // Si es un slice, convertirlo a string
+                        if (v && v.tipo === 'slice') {
+                            return this.sliceToString(v);
+                        }
                         return String(v);
                     }).join(' ');
                     this.salida.push(texto);
                 } else {
-                    // Evaluar la expresion completa (puede ser a + b)
                     const resultado = this.evaluarExpresionSimpleConVariables(args);
-                    this.salida.push(String(resultado));
+                    // Si es un slice, convertirlo a string
+                    if (resultado && resultado.tipo === 'slice') {
+                        this.salida.push(this.sliceToString(resultado));
+                    } else if (typeof resultado === 'string' && resultado.startsWith('"') && resultado.endsWith('"')) {
+                        this.salida.push(resultado.slice(1, -1));
+                    } else {
+                        this.salida.push(String(resultado));
+                    }
                 }
             }
             return;
@@ -888,6 +942,21 @@ class Evaluador {
     evaluarExpresionSimpleConVariables(expr) {
         expr = expr.trim();
         
+        // Si es un slice literal
+        const sliceMatch = expr.match(/\[\](\w+)\{([^}]*)\}/);
+        if (sliceMatch) {
+            const tipo = sliceMatch[1];
+            const elementosStr = sliceMatch[2].trim();
+            const elementos = elementosStr ? elementosStr.split(',').map(e => {
+                const val = e.trim();
+                if (val.match(/^[0-9]+$/)) {
+                    return parseInt(val);
+                }
+                return val;
+            }) : [];
+            return this.crearSlice(tipo, elementos);
+        }
+
         if (expr.match(/^".*"$/)) {
             return expr;
         }
