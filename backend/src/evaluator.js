@@ -481,13 +481,63 @@ class Evaluador {
         if (!slice || slice.tipo !== 'slice') {
             return 'nil';
         }
+        if (!slice.elementos || slice.elementos.length === 0) {
+            return '[]';
+        }
         const elementosStr = slice.elementos.map(e => String(e)).join(', ');
         return `[${elementosStr}]`;
     }
 
+    // ACCEDER A UN ELEMENTO SLICE POR INDICE
+    accederElementoSlice(slice, indice) {
+        if (!slice || slice.tipo !== 'slice') {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'No es un slice valido'
+            });
+            return null;
+        }
+        
+        const idx = this.evaluarExpresionSimpleConVariables(String(indice));
+        
+        if (idx < 0 || idx >= slice.elementos.length) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `Indice ${idx} fuera de rango. Tamaño: ${slice.elementos.length}`
+            });
+            return null;
+        }
+        
+        return slice.elementos[idx];
+    }
+    
+    // MODIFICAR UN ELEMENTO DEL SLICE POR INDICE
+    modificarElementoSlice(slice, indice, valor) {
+        if (!slice || slice.tipo !== 'slice') {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'No es un slice valido'
+            });
+            return;
+        }
+        
+        const idx = this.evaluarExpresionSimpleConVariables(String(indice));
+        
+        if (idx < 0 || idx >= slice.elementos.length) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `Indice ${idx} fuera de rango. Tamaño: ${slice.elementos.length}`
+            });
+            return;
+        }
+        
+        const valorEvaluado = this.evaluarExpresionSimpleConVariables(String(valor));
+        slice.elementos[idx] = valorEvaluado;
+    }
 
     // METODO PARA INTERPRETAR CODIGO DIRECTO
     interpretarCodigo(codigo) {
+        // Reiniciar estado
         this.salida = [];
         this.errores = [];
         this.ambitoGlobal = {};
@@ -497,31 +547,82 @@ class Evaluador {
         // Para limpiar el codigo: eliminar saltos de linea y espacios extras
         let codigoLimpio = codigo.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
         
-        // Buscar funciones: func nombre(parametros)
-        const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*([a-zA-Z0-9_]*)?\s*\{([^}]*)\}/g;
+        // Buscar todas las funciones (incluyendo las que tienen retorno)
+        const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*([a-zA-Z0-9_]*)?\s*\{/g;
         let match;
+        let funcionesEncontradas = [];
         
+        // Primero encontrar todas las posiciones de funciones
         while ((match = funcionRegex.exec(codigoLimpio)) !== null) {
             const nombre = match[1];
             const paramsStr = match[2];
             const tipoRetorno = match[3] || null;
-            const cuerpo = match[4];
+            const inicioFuncion = match.index;
+            const inicioCuerpo = match.index + match[0].length;
             
-            this.funciones[nombre] = {
+            // Encontrar el cuerpo de la funcion contando llaves
+            let contadorLlaves = 1;
+            let i = inicioCuerpo;
+            while (i < codigoLimpio.length && contadorLlaves > 0) {
+                if (codigoLimpio[i] === '{') contadorLlaves++;
+                if (codigoLimpio[i] === '}') contadorLlaves--;
+                i++;
+            }
+            const cuerpo = codigoLimpio.substring(inicioCuerpo, i - 1);
+            
+            funcionesEncontradas.push({
                 nombre: nombre,
-                params: this.extraerParametros(paramsStr),
+                paramsStr: paramsStr,
                 tipoRetorno: tipoRetorno,
-                cuerpo: { type: 'Bloque', sentencias: this.parsearSentencias(cuerpo) }
+                cuerpo: cuerpo
+            });
+        }
+        
+        // Guardar las funciones en el objeto funciones
+        for (let func of funcionesEncontradas) {
+            this.funciones[func.nombre] = {
+                nombre: func.nombre,
+                params: this.extraerParametros(func.paramsStr),
+                tipoRetorno: func.tipoRetorno,
+                cuerpo: { type: 'Bloque', sentencias: this.parsearSentencias(func.cuerpo) }
             };
         }
         
-        // Buscar y ejecutar main
-        const mainMatch = codigoLimpio.match(/func\s+main\s*\(\s*\)\s*\{([^}]*)\}/);
+        // Buscar y ejecutar main contando llaves correctamente
+        let mainMatch = null;
+        let inicioMain = codigoLimpio.indexOf('func main() {');
+        
+        if (inicioMain !== -1) {
+            let contadorLlaves = 0;
+            let i = inicioMain;
+            let inicioCuerpo = -1;
+            let finCuerpo = -1;
+            
+            while (i < codigoLimpio.length) {
+                if (codigoLimpio[i] === '{') {
+                    contadorLlaves++;
+                    if (inicioCuerpo === -1) {
+                        inicioCuerpo = i + 1;
+                    }
+                } else if (codigoLimpio[i] === '}') {
+                    contadorLlaves--;
+                    if (contadorLlaves === 0) {
+                        finCuerpo = i;
+                        break;
+                    }
+                }
+                i++;
+            }
+            
+            if (inicioCuerpo !== -1 && finCuerpo !== -1) {
+                const contenido = codigoLimpio.substring(inicioCuerpo, finCuerpo);
+                mainMatch = { contenido: contenido };
+            }
+        }
+        
+        // Ejecutar el cuerpo de main
         if (mainMatch) {
-            const contenido = mainMatch[1];
-            this.ejecutarBloqueSimple(contenido);
-        } else {
-            console.log("No se encontro funcion main");
+            this.ejecutarBloqueCompleto(mainMatch.contenido);
         }
         
         return {
@@ -592,6 +693,48 @@ class Evaluador {
             
             // Procesar linea normal
             this.procesarLineaSimple(linea);
+        }
+    }
+
+    // EJECUTAR BLOQUE DE CODIGO COMPLETO
+    ejecutarBloqueCompleto(bloque) {
+        let i = 0;
+        let inString = false;
+        let inSlice = false;
+        let current = '';
+        
+        while (i < bloque.length) {
+            const char = bloque[i];
+            
+            // Detectar si esta dentro de un string
+            if (char === '"') {
+                inString = !inString;
+                current += char;
+            }
+            // Detectar si esta dentro de un slice
+            else if (char === '[' && !inString) {
+                inSlice = true;
+                current += char;
+            }
+            else if (char === ']' && !inString) {
+                inSlice = false;
+                current += char;
+            }
+            // Separar por punto y coma si no esta en un string o slice
+            else if (char === ';' && !inString && !inSlice) {
+                if (current.trim()) {
+                    this.procesarLineaSimple(current.trim());
+                }
+                current = '';
+            }
+            else {
+                current += char;
+            }
+            i++;
+        }
+        
+        if (current.trim()) {
+            this.procesarLineaSimple(current.trim());
         }
     }
     
@@ -819,8 +962,26 @@ class Evaluador {
         if (linea.startsWith('return')) {
             return;
         }
-
-        // CREACION DE SLICE: []int(1, 2, 3)
+        
+        // SLICE CON ASIGNACION: numeros := []int{1, 2, 3}
+        const sliceAsignacionMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*\[\](\w+)\{([^}]*)\}/);
+        if (sliceAsignacionMatch) {
+            const varNombre = sliceAsignacionMatch[1];
+            const tipo = sliceAsignacionMatch[2];
+            const elementosStr = sliceAsignacionMatch[3].trim();
+            const elementos = elementosStr ? elementosStr.split(',').map(e => {
+                const val = e.trim();
+                if (val.match(/^[0-9]+$/)) {
+                    return parseInt(val);
+                }
+                return val;
+            }) : [];
+            const slice = this.crearSlice(tipo, elementos);
+            this.ambitoActual[varNombre] = { valor: slice, tipo: 'slice' };
+            return;
+        }
+        
+        // SLICE LITERAL SOLO: []int{1, 2, 3}
         const sliceMatch = linea.match(/\[\](\w+)\{([^}]*)\}/);
         if (sliceMatch) {
             const tipo = sliceMatch[1];
@@ -833,17 +994,43 @@ class Evaluador {
                 return val;
             }) : [];
             const slice = this.crearSlice(tipo, elementos);
+            return slice;
+        }
+
+        // ASIGNACION A ELEMENTO DE SLICE: numeros[2] = 100
+        const sliceAsignacionElementoMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\[([0-9]+)\]\s*=\s*(.+)$/);
+        if (sliceAsignacionElementoMatch) {
+            const nombreSlice = sliceAsignacionElementoMatch[1];
+            const indice = parseInt(sliceAsignacionElementoMatch[2]);
+            const valor = sliceAsignacionElementoMatch[3];
             
-            // Verificar si es asignacion a variable: numeros := []int{1,2,3}
-            const asignacionMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*\[\](\w+)\{([^}]*)\}/);
-            if (asignacionMatch) {
-                const varNombre = asignacionMatch[1];
-                this.ambitoActual[varNombre] = { valor: slice, tipo: 'slice' };
+            const variable = this.ambitoActual[nombreSlice];
+            const slice = variable ? variable.valor : null;
+            
+            if (slice && slice.tipo === 'slice') {
+                const valorEvaluado = this.evaluarExpresionSimpleConVariables(valor);
+                if (indice >= 0 && indice < slice.elementos.length) {
+                    slice.elementos[indice] = valorEvaluado;
+                } else {
+                    this.errores.push({
+                        type: 'Semantico',
+                        description: `Indice ${indice} fuera de rango. Tamaño: ${slice.elementos.length}`
+                    });
+                }
             }
             return;
         }
+
+        // DECLARACION CON INFERENCIA: x := 42
+        const inferMatch = linea.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*([0-9]+)/);
+        if (inferMatch) {
+            const nombre = inferMatch[1];
+            const valor = parseInt(inferMatch[2]);
+            this.ambitoActual[nombre] = { valor: valor, tipo: 'int' };
+            return;
+        }
         
-        // Llamada a funcion con parametros
+        // LLAMADA A FUNCION: sumar(5, 3)
         const llamadaMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*([^)]*)\s*\)$/);
         if (llamadaMatch) {
             const nombreFunc = llamadaMatch[1];
@@ -853,52 +1040,71 @@ class Evaluador {
             return;
         }
 
-        // Declaracion var x int = 10
-        let match = linea.match(/var\s+([a-z]+)\s+int\s*=\s*([0-9]+)/);
+        // DECLARACION VAR CON VALOR: var x int = 10
+        let match = linea.match(/var\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+int\s*=\s*([0-9]+)/);
         if (match) {
-            this.ambitoActual[match[1]] = { valor: parseInt(match[2]), tipo: 'int' };
+            const nombre = match[1];
+            const valor = parseInt(match[2]);
+            this.ambitoActual[nombre] = { valor: valor, tipo: 'int' };
             return;
         }
         
-        // Declaracion var x int
-        match = linea.match(/var\s+([a-z]+)\s+int/);
+        // DECLARACION VAR SIN VALOR: var x int
+        match = linea.match(/var\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+int/);
         if (match) {
-            this.ambitoActual[match[1]] = { valor: 0, tipo: 'int' };
+            const nombre = match[1];
+            this.ambitoActual[nombre] = { valor: 0, tipo: 'int' };
             return;
         }
         
-        // Declaracion x := 42
-        match = linea.match(/([a-z]+)\s*:=\s*([0-9]+)/);
-        if (match) {
-            this.ambitoActual[match[1]] = { valor: parseInt(match[2]), tipo: 'int' };
-            return;
-        }
-        
-        // Asignacion x = 10
-        match = linea.match(/([a-z]+)\s*=\s*([0-9]+)/);
+        // ASIGNACION SIMPLE: x = 10
+        match = linea.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([0-9]+)/);
         if (match && !linea.includes(':=')) {
-            if (this.ambitoActual[match[1]]) {
-                this.ambitoActual[match[1]].valor = parseInt(match[2]);
+            const nombre = match[1];
+            const valor = parseInt(match[2]);
+            if (this.ambitoActual[nombre]) {
+                this.ambitoActual[nombre].valor = valor;
             }
             return;
         }
         
-        // Asignacion compuesta x += 3
-        match = linea.match(/([a-z]+)\s*\+=\s*([0-9]+)/);
+        // ASIGNACION COMPUESTA: x += 3
+        match = linea.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\+=\s*([0-9]+)/);
         if (match) {
-            if (this.ambitoActual[match[1]]) {
-                this.ambitoActual[match[1]].valor += parseInt(match[2]);
+            const nombre = match[1];
+            const valor = parseInt(match[2]);
+            if (this.ambitoActual[nombre]) {
+                this.ambitoActual[nombre].valor += valor;
             }
             return;
         }
         
-        // fmt.Println
+        // FMT.PRINTLN
         if (linea.includes('fmt.Println')) {
             const printMatch = linea.match(/fmt\.Println\((.*)\)/);
             if (printMatch) {
                 let args = printMatch[1];
                 
-                // Verificar si tiene comas
+                // Verificar si es acceso a slice: numeros[0]
+                const sliceAccesoMatch = args.match(/([a-zA-Z_][a-zA-Z0-9_]*)\[([0-9]+)\]/);
+                if (sliceAccesoMatch) {
+                    const nombreSlice = sliceAccesoMatch[1];
+                    const indice = parseInt(sliceAccesoMatch[2]);
+                    const variable = this.ambitoActual[nombreSlice];
+                    const slice = variable ? variable.valor : null;
+                    if (slice && slice.tipo === 'slice') {
+                        if (indice >= 0 && indice < slice.elementos.length) {
+                            this.salida.push(String(slice.elementos[indice]));
+                        } else {
+                            this.salida.push('error');
+                        }
+                    } else {
+                        this.salida.push('nil');
+                    }
+                    return;
+                }
+                
+                // Verificar si tiene multiples argumentos (comas)
                 let tieneMultiples = false;
                 let inStr = false;
                 for (let k = 0; k < args.length; k++) {
