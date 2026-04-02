@@ -488,6 +488,37 @@ class Evaluador {
         return `[${elementosStr}]`;
     }
 
+    // FUNCION APPEND PARA SLICES
+    funcionAppend(slice, nuevosElementos) {
+        if (!slice || slice.tipo !== 'slice') {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'append requiere un slice como primer argumento'
+            });
+            return slice;
+        }
+        
+        // Evaluar los nuevos elementos
+        const elementosAAgregar = nuevosElementos.map(el => {
+            const val = el.trim();
+            if (val.match(/^[0-9]+$/)) {
+                return parseInt(val);
+            }
+            // Si es una variable, se obtiene su valor
+            if (this.ambitoActual[val]) {
+                return this.ambitoActual[val].valor;
+            }
+            return this.evaluarExpresionSimpleConVariables(val);
+        });
+        
+        // Crear nuevo slice con los elementos agregados
+        return {
+            tipo: 'slice',
+            tipoElemento: slice.tipoElemento,
+            elementos: [...slice.elementos, ...elementosAAgregar]
+        };
+    }
+
     // ACCEDER A UN ELEMENTO SLICE POR INDICE
     accederElementoSlice(slice, indice) {
         if (!slice || slice.tipo !== 'slice') {
@@ -1020,6 +1051,46 @@ class Evaluador {
             }
             return;
         }
+
+        // FUNCION APPEND: numeros = append(numeros, 4)
+        const appendMatch = linea.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*append\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*(.+)\s*\)/);
+        if (appendMatch) {
+            const varDestino = appendMatch[1];
+            const varOrigen = appendMatch[2];
+            const nuevosElementos = appendMatch[3].split(',').map(e => e.trim());
+            
+            const variable = this.ambitoActual[varOrigen];
+            const slice = variable ? variable.valor : null;
+            
+            if (slice && slice.tipo === 'slice') {
+                const nuevoSlice = this.funcionAppend(slice, nuevosElementos);
+                this.ambitoActual[varDestino] = { valor: nuevoSlice, tipo: 'slice' };
+            } else {
+                this.errores.push({
+                    type: 'Semantico',
+                    description: `La variable '${varOrigen}' no es un slice valido`
+                });
+            }
+            return;
+        }
+        
+        // APPEND SIN ASIGNACION (en expresion)
+        const appendSoloMatch = linea.match(/append\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*(.+)\s*\)/);
+        if (appendSoloMatch && !linea.includes('=')) {
+            const varOrigen = appendSoloMatch[1];
+            const nuevosElementos = appendSoloMatch[2].split(',').map(e => e.trim());
+            
+            const variable = this.ambitoActual[varOrigen];
+            const slice = variable ? variable.valor : null;
+            
+            if (slice && slice.tipo === 'slice') {
+                const nuevoSlice = this.funcionAppend(slice, nuevosElementos);
+                return nuevoSlice;
+            }
+            return null;
+        }
+
+        // ----- DECLARACIONES -----
 
         // DECLARACION CON INFERENCIA: x := 42
         const inferMatch = linea.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*([0-9]+)/);
