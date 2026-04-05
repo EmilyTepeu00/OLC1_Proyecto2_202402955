@@ -519,6 +519,18 @@ class Evaluador {
         };
     }
 
+    // FUNCION LEN PARA OBTENER EL TAMAÑO DEL SLICE
+    funcionLen(slice) {
+        if (!slice || slice.tipo !== 'slice') {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'len requiere un slice como argumento'
+            });
+            return 0;
+        }
+        return slice.elementos.length;
+    }
+
     // ACCEDER A UN ELEMENTO SLICE POR INDICE
     accederElementoSlice(slice, indice) {
         if (!slice || slice.tipo !== 'slice') {
@@ -1090,6 +1102,18 @@ class Evaluador {
             return null;
         }
 
+        // FUNCION LEN: tamaño := len(numeros)
+        const lenAsignacionMatch = linea.match(/^([^:]+)\s*:=\s*len\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
+        if (lenAsignacionMatch) {
+            const varDestino = lenAsignacionMatch[1].trim();
+            const varOrigen = lenAsignacionMatch[2];
+            const variable = this.ambitoActual[varOrigen];
+            const slice = variable ? variable.valor : null;
+            const tamaño = this.funcionLen(slice);
+            this.ambitoActual[varDestino] = { valor: tamaño, tipo: 'int' };
+            return;
+        }
+
         // ----- DECLARACIONES -----
 
         // DECLARACION CON INFERENCIA: x := 42
@@ -1156,6 +1180,17 @@ class Evaluador {
             if (printMatch) {
                 let args = printMatch[1];
                 
+                // VERIFICAR LEN PRIMERO
+                const lenMatch = args.match(/^len\s*\(\s*([a-zA-ZñÑ_][a-zA-Z0-9ñÑ_]*)\s*\)$/);
+                if (lenMatch) {
+                    const varOrigen = lenMatch[1];
+                    const variable = this.ambitoActual[varOrigen];
+                    const slice = variable ? variable.valor : null;
+                    const resultado = this.funcionLen(slice);
+                    this.salida.push(String(resultado));
+                    return;
+                }
+                
                 // Verificar si es acceso a slice: numeros[0]
                 const sliceAccesoMatch = args.match(/([a-zA-Z_][a-zA-Z0-9_]*)\[([0-9]+)\]/);
                 if (sliceAccesoMatch) {
@@ -1206,8 +1241,10 @@ class Evaluador {
                         this.salida.push(this.sliceToString(resultado));
                     } else if (typeof resultado === 'string' && resultado.startsWith('"') && resultado.endsWith('"')) {
                         this.salida.push(resultado.slice(1, -1));
-                    } else {
+                    } else if (resultado !== undefined && resultado !== null) {
                         this.salida.push(String(resultado));
+                    } else {
+                        this.salida.push('');
                     }
                 }
             }
@@ -1232,6 +1269,16 @@ class Evaluador {
                 return val;
             }) : [];
             return this.crearSlice(tipo, elementos);
+        }
+
+        // Funcion len dentro de expresion
+        const lenMatch = expr.match(/len\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
+        if (lenMatch) {
+            const varOrigen = lenMatch[1];
+            const variable = this.ambitoActual[varOrigen];
+            const slice = variable ? variable.valor : null;
+            const resultado = this.funcionLen(slice);
+            return resultado;
         }
 
         if (expr.match(/^".*"$/)) {
