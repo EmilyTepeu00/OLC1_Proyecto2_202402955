@@ -531,6 +531,80 @@ class Evaluador {
         return slice.elementos.length;
     }
 
+    // ----- STRUCTS -----
+    
+    // GUARDAR DEFINICION DE UN STRUCT EN EL AMBITO GLOBAL
+    guardarStruct(nombre, atributos) {
+        this.structs = this.structs || {};
+        this.structs[nombre] = atributos;
+        console.log("Struct guardado:", nombre, atributos);
+    }
+    
+    // CREAR INSTANCIA DE UN STRUCT
+    crearStruct(nombre, valores) {
+        const definicion = this.structs[nombre];
+        if (!definicion) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `Struct '${nombre}' no definido`
+            });
+            return null;
+        }
+        
+        const instancia = {
+            tipo: 'struct',
+            nombreStruct: nombre,
+            atributos: {}
+        };
+        
+        // Asignar valores a los atributos
+        for (let i = 0; i < definicion.length; i++) {
+            const attr = definicion[i];
+            let valorInicial;
+            
+            if (valores && valores[attr.nombre] !== undefined) {
+                const valorStr = String(valores[attr.nombre]);
+                // Si es numero decimal
+                if (valorStr.match(/^[0-9]+\.[0-9]+$/)) {
+                    valorInicial = parseFloat(valorStr);
+                }
+                // Si es numero entero
+                else if (valorStr.match(/^[0-9]+$/)) {
+                    valorInicial = parseInt(valorStr);
+                }
+                // Si es string
+                else if (valorStr.match(/^".*"$/)) {
+                    valorInicial = valorStr.slice(1, -1);
+                }
+                else {
+                    valorInicial = this.evaluarExpresionSimpleConVariables(valorStr);
+                }
+            } else {
+                valorInicial = this.obtenerValorPorDefecto(attr.tipo);
+            }
+            instancia.atributos[attr.nombre] = valorInicial;
+        }
+        
+        return instancia;
+    }
+    
+    // CONVERTIR STRUCT A STRING PARA IMPRIMIR
+    structToString(struct) {
+        if (!struct || struct.tipo !== 'struct') {
+            return 'nil';
+        }
+        const attrs = [];
+        for (const [key, value] of Object.entries(struct.atributos)) {
+            // Si el valor es string -> mostrarlo sin comillas
+            if (typeof value === 'string') {
+                attrs.push(`${key}: ${value}`);
+            } else {
+                attrs.push(`${key}: ${value}`);
+            }
+        }
+        return `${struct.nombreStruct}{${attrs.join(', ')}}`;
+    }
+
     // ACCEDER A UN ELEMENTO SLICE POR INDICE
     accederElementoSlice(slice, indice) {
         if (!slice || slice.tipo !== 'slice') {
@@ -590,6 +664,29 @@ class Evaluador {
         // Para limpiar el codigo: eliminar saltos de linea y espacios extras
         let codigoLimpio = codigo.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
         
+        // Buscar definiciones de struct: struct Persona { string Nombre; int Edad; }
+        const structRegex = /struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}/g;
+        let structMatch;
+        
+        while ((structMatch = structRegex.exec(codigoLimpio)) !== null) {
+            const nombreStruct = structMatch[1];
+            const atributosStr = structMatch[2];
+            
+            // Parsear atributos: string Nombre; int Edad;
+            const atributos = [];
+            const attrRegex = /(\w+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;/g;
+            let attrMatch;
+            
+            while ((attrMatch = attrRegex.exec(atributosStr)) !== null) {
+                atributos.push({
+                    tipo: attrMatch[1],
+                    nombre: attrMatch[2]
+                });
+            }
+            
+            this.guardarStruct(nombreStruct, atributos);
+        }
+
         // Buscar todas las funciones (incluyendo las que tienen retorno)
         const funcionRegex = /func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*([a-zA-Z0-9_]*)?\s*\{/g;
         let match;
@@ -1040,6 +1137,53 @@ class Evaluador {
             return slice;
         }
 
+        // CREACION DE STRUCT: persona := Persona{Nombre: "Alice", Edad: 25}
+        const structAsignacionMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*([A-Z][a-zA-Z0-9_]*)\s*\{([^}]*)\}/);
+        if (structAsignacionMatch) {
+            const varNombre = structAsignacionMatch[1];
+            const nombreStruct = structAsignacionMatch[2];
+            const valoresStr = structAsignacionMatch[3].trim();
+            
+            // Parsear valores: Nombre: "Alice", Edad: 25
+            const valores = {};
+            if (valoresStr) {
+                const pares = valoresStr.split(',');
+                for (let par of pares) {
+                    const [key, val] = par.split(':');
+                    if (key && val) {
+                        valores[key.trim()] = val.trim();
+                    }
+                }
+            }
+            
+            const instancia = this.crearStruct(nombreStruct, valores);
+            if (instancia) {
+                this.ambitoActual[varNombre] = { valor: instancia, tipo: 'struct' };
+            }
+            return;
+        }
+        
+        // STRUCT LITERAL SOLO (sin asignacion)
+        const structMatch = linea.match(/^([A-Z][a-zA-Z0-9_]*)\s*\{([^}]*)\}/);
+        if (structMatch && !linea.includes(':=')) {
+            const nombreStruct = structMatch[1];
+            const valoresStr = structMatch[2].trim();
+            
+            const valores = {};
+            if (valoresStr) {
+                const pares = valoresStr.split(',');
+                for (let par of pares) {
+                    const [key, val] = par.split(':');
+                    if (key && val) {
+                        valores[key.trim()] = val.trim();
+                    }
+                }
+            }
+            
+            const instancia = this.crearStruct(nombreStruct, valores);
+            return instancia;
+        }
+
         // ASIGNACION A ELEMENTO DE SLICE: numeros[2] = 100
         const sliceAsignacionElementoMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\[([0-9]+)\]\s*=\s*(.+)$/);
         if (sliceAsignacionElementoMatch) {
@@ -1239,6 +1383,8 @@ class Evaluador {
                     // Si es un slice, convertirlo a string
                     if (resultado && resultado.tipo === 'slice') {
                         this.salida.push(this.sliceToString(resultado));
+                    } else if (resultado && resultado.tipo === 'struct') {
+                        this.salida.push(this.structToString(resultado));
                     } else if (typeof resultado === 'string' && resultado.startsWith('"') && resultado.endsWith('"')) {
                         this.salida.push(resultado.slice(1, -1));
                     } else if (resultado !== undefined && resultado !== null) {
