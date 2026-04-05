@@ -1184,6 +1184,35 @@ class Evaluador {
             return instancia;
         }
 
+        // ASIGNACION A ATRIBUTO DE STRUCT: persona.Nombre = "Alice"
+        const structAsignacionAttrMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
+        if (structAsignacionAttrMatch) {
+            const varStruct = structAsignacionAttrMatch[1];
+            const atributo = structAsignacionAttrMatch[2];
+            const valor = structAsignacionAttrMatch[3];
+            
+            const variable = this.ambitoActual[varStruct];
+            const instancia = variable ? variable.valor : null;
+            
+            if (instancia && instancia.tipo === 'struct') {
+                const valorEvaluado = this.evaluarExpresionSimpleConVariables(valor);
+                if (instancia.atributos[atributo] !== undefined) {
+                    instancia.atributos[atributo] = valorEvaluado;
+                } else {
+                    this.errores.push({
+                        type: 'Semantico',
+                        description: `El struct '${instancia.nombreStruct}' no tiene el atributo '${atributo}'`
+                    });
+                }
+            } else {
+                this.errores.push({
+                    type: 'Semantico',
+                    description: `La variable '${varStruct}' no es un struct valido`
+                });
+            }
+            return;
+        }
+
         // ASIGNACION A ELEMENTO DE SLICE: numeros[2] = 100
         const sliceAsignacionElementoMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\[([0-9]+)\]\s*=\s*(.+)$/);
         if (sliceAsignacionElementoMatch) {
@@ -1345,6 +1374,28 @@ class Evaluador {
                     if (slice && slice.tipo === 'slice') {
                         if (indice >= 0 && indice < slice.elementos.length) {
                             this.salida.push(String(slice.elementos[indice]));
+                        } else {
+                            this.salida.push('error');
+                        }
+                    } else {
+                        this.salida.push('nil');
+                    }
+                    return;
+                }
+
+                // Verificar si es acceso a atributo de struct: persona.Nombre
+                const structAttrMatch = args.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)$/);
+                if (structAttrMatch) {
+                    const varStruct = structAttrMatch[1];
+                    const atributo = structAttrMatch[2];
+                    
+                    const variable = this.ambitoActual[varStruct];
+                    const instancia = variable ? variable.valor : null;
+                    
+                    if (instancia && instancia.tipo === 'struct') {
+                        if (instancia.atributos[atributo] !== undefined) {
+                            const valor = instancia.atributos[atributo];
+                            this.salida.push(String(valor));
                         } else {
                             this.salida.push('error');
                         }
