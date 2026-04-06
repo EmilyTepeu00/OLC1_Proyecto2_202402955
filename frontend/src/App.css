@@ -208,3 +208,105 @@ body {
     margin-top: 15px;
     color: white;
 }
+
+
+/* ESTILOS PARA EL REPORTE DE ERRORES */
+
+.error-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.error-count {
+    background-color: #f48771;
+    color: #1e1e1e;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.error-filters {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    background-color: #2d2d2d;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+.error-filters button {
+    padding: 4px 10px;
+    background-color: #3c3c3c;
+    color: #d4d4d4;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+}
+
+.error-filters button:hover {
+    background-color: #4c4c4c;
+}
+
+.error-filters .filter-active {
+    background-color: #0e639c;
+    color: white;
+}
+
+.error-row {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.error-row:hover {
+    background-color: #2d2d2d;
+}
+
+.error-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.error-badge-Lexico {
+    background-color: #e6a700;
+    color: #1e1e1e;
+}
+
+.error-badge-Sintactico {
+    background-color: #f48771;
+    color: #1e1e1e;
+}
+
+.error-badge-Semantico {
+    background-color: #569cd6;
+    color: #1e1e1e;
+}
+
+.error-row-error-Lexico td:not(:first-child) {
+    border-left: 2px solid #e6a700;
+}
+
+.error-row-error-Sintactico td:not(:first-child) {
+    border-left: 2px solid #f48771;
+}
+
+.error-row-error-Semantico td:not(:first-child) {
+    border-left: 2px solid #569cd6;
+}
+
+.no-errors {
+    color: #6a9955;
+    text-align: center;
+    padding: 20px;
+    font-style: normal;
+}
+
+.no-errors::before {
+    content: "✓ ";
+    font-weight: bold;
+}
