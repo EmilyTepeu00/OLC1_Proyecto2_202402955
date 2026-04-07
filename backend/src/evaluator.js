@@ -11,11 +11,17 @@ class Evaluador {
 
     // INTERPRETACION DESDE EL AST
     interpretar(ast) {
+        this.salida = [];
+        this.errores = [];
+        this.ambitoGlobal = {};
+        this.ambitoActual = this.ambitoGlobal;
+        this.funciones = {};
+    
         if (!ast) {
             return { output: this.salida, errors: this.errores };
         }
-        
-        // Recorrer el AST dependiendo del tipo
+
+        // Recorrer el AST
         if (ast.type === 'Programa') {
             if (ast.declaraciones) {
                 for (let declaracion of ast.declaraciones) {
@@ -23,7 +29,7 @@ class Evaluador {
                 }
             }
         }
-        
+    
         return {
             output: this.salida,
             errors: this.errores

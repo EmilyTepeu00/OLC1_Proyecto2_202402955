@@ -499,3 +499,119 @@ body {
     text-align: center;
     padding: 20px;
 }
+
+
+/* ESTILOS PARA EL AST */
+.ast-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.ast-header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.ast-nodos-count {
+    background-color: #4ec9b0;
+    color: #1e1e1e;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.ast-vista-toggle {
+    display: flex;
+    gap: 2px;
+    background-color: #3c3c3c;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ast-vista-toggle button {
+    padding: 4px 10px;
+    background: none;
+    border: none;
+    color: #d4d4d4;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+}
+
+.ast-vista-toggle button:hover {
+    background-color: #4c4c4c;
+}
+
+.ast-vista-toggle .vista-active {
+    background-color: #0e639c;
+    color: white;
+}
+
+.ast-expandir-todo {
+    padding: 4px 10px;
+    background-color: #0e639c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.ast-expandir-todo:hover {
+    background-color: #1177bb;
+}
+
+/* Estilos para árbol visual */
+.arbol-visual {
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    padding: 15px;
+    background-color: #1e1e1e;
+    overflow-x: auto;
+}
+
+.arbol-nodo {
+    user-select: none;
+}
+
+.arbol-nodo-contenido {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.arbol-nodo-contenido:hover {
+    background-color: #2d2d2d;
+}
+
+.arbol-expandir {
+    color: #569cd6;
+    font-size: 10px;
+    width: 16px;
+    text-align: center;
+}
+
+.arbol-hoja {
+    color: #6a9955;
+    font-size: 10px;
+    width: 16px;
+    text-align: center;
+}
+
+.arbol-nombre {
+    color: #d4d4d4;
+}
+
+.arbol-hijos {
+    border-left: 1px dashed #3c3c3c;
+    margin-left: 8px;
+}

@@ -153,12 +153,18 @@ operador_asign
 
 llamada_funcion
     : IDENTIFICADOR PARENIZQ lista_argumentos PARENDER
+    | IDENTIFICADOR PUNTO IDENTIFICADOR PARENIZQ lista_argumentos PARENDER
+    | IDENTIFICADOR PUNTO IDENTIFICADOR PUNTO IDENTIFICADOR PARENIZQ lista_argumentos PARENDER
     ;
 
 lista_argumentos
     : expresion COMA lista_argumentos
     | expresion
     |
+    ;
+
+argumentos
+    : lista_argumentos
     ;
 
 expresion
