@@ -1729,6 +1729,86 @@ class Evaluador {
         
         return resultado;
     }
+
+    // ----- REPORTE TABLA DE SIMBOLOS -----
+    
+    obtenerTablaSimbolos() {
+        const tabla = [];
+        
+        // Recorrer ambito global
+        for (const [nombre, info] of Object.entries(this.ambitoGlobal)) {
+            tabla.push({
+                nombre: nombre,
+                tipo: info.tipo || typeof info.valor,
+                ambito: 'global',
+                valor: this.valorToString(info.valor),
+                linea: info.linea || '-',
+                columna: info.columna || '-'
+            });
+        }
+        
+        // Recorrer ambito actual (si es diferente al global)
+        if (this.ambitoActual !== this.ambitoGlobal) {
+            for (const [nombre, info] of Object.entries(this.ambitoActual)) {
+                // Evitar duplicados
+                if (!this.ambitoGlobal[nombre]) {
+                    tabla.push({
+                        nombre: nombre,
+                        tipo: info.tipo || typeof info.valor,
+                        ambito: 'local',
+                        valor: this.valorToString(info.valor),
+                        linea: info.linea || '-',
+                        columna: info.columna || '-'
+                    });
+                }
+            }
+        }
+        
+        // Agregar funciones
+        for (const [nombre, func] of Object.entries(this.funciones)) {
+            tabla.push({
+                nombre: nombre,
+                tipo: 'funcion',
+                ambito: 'global',
+                valor: `func(${func.params.map(p => `${p.nombre} ${p.tipo}`).join(', ')})`,
+                linea: '-',
+                columna: '-'
+            });
+        }
+        
+        // Agregar structs
+        if (this.structs) {
+            for (const [nombre, atributos] of Object.entries(this.structs)) {
+                const attrsStr = atributos.map(a => `${a.tipo} ${a.nombre}`).join(', ');
+                tabla.push({
+                    nombre: nombre,
+                    tipo: 'struct',
+                    ambito: 'global',
+                    valor: `{ ${attrsStr} }`,
+                    linea: '-',
+                    columna: '-'
+                });
+            }
+        }
+        
+        return tabla;
+    }
+    
+    valorToString(valor) {
+        if (valor === null) return 'nil';
+        if (valor === undefined) return 'undefined';
+        if (typeof valor === 'object') {
+            if (valor.tipo === 'slice') {
+                return `[${valor.elementos.join(', ')}]`;
+            }
+            if (valor.tipo === 'struct') {
+                const attrs = Object.entries(valor.atributos).map(([k, v]) => `${k}: ${v}`).join(', ');
+                return `${valor.nombreStruct}{${attrs}}`;
+            }
+            return JSON.stringify(valor);
+        }
+        return String(valor);
+    }
 }
 
 module.exports = Evaluador;

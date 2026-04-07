@@ -81,6 +81,8 @@ app.post('/api/parse', (req, res) => {
             const resultadoEjecucion = evaluador.interpretarCodigo(code);
             resultado.consoleOutput = resultadoEjecucion.output;
             resultado.errors = resultadoEjecucion.errors;
+            // Guardar evaluador para la tabla de simbolos
+            resultado.tablaSimbolos = evaluador.obtenerTablaSimbolos();
         }
         
     } catch (error) {

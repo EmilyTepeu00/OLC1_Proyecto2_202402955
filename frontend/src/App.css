@@ -310,3 +310,192 @@ body {
     content: "✓ ";
     font-weight: bold;
 }
+
+/* ESTILOS PARA PESTAÑAS */
+.report-tabs {
+    display: flex;
+    background-color: #2d2d2d;
+    border-bottom: 1px solid #3c3c3c;
+    padding: 0 10px;
+}
+
+.report-tabs button {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    color: #858585;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.report-tabs button:hover {
+    color: #d4d4d4;
+    background-color: #3c3c3c;
+}
+
+.report-tabs .tab-active {
+    color: #569cd6;
+    border-bottom: 2px solid #569cd6;
+}
+
+.report-content {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Estilos para tabla de simbolos */
+.tabla-container {
+    margin: 10px;
+    border: 1px solid #3c3c3c;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.tabla-header {
+    background-color: #2d2d2d;
+    padding: 8px 12px;
+    font-weight: bold;
+    font-size: 14px;
+    border-bottom: 1px solid #3c3c3c;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tabla-count {
+    background-color: #569cd6;
+    color: #1e1e1e;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.tabla-filters {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    background-color: #252526;
+    border-bottom: 1px solid #3c3c3c;
+    flex-wrap: wrap;
+}
+
+.tabla-filters button {
+    padding: 4px 10px;
+    background-color: #3c3c3c;
+    color: #d4d4d4;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.tabla-filters .filter-active {
+    background-color: #0e639c;
+    color: white;
+}
+
+.tabla-busqueda {
+    padding: 10px;
+    background-color: #252526;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+.busqueda-input {
+    width: 100%;
+    padding: 8px;
+    background-color: #3c3c3c;
+    border: 1px solid #4c4c4c;
+    border-radius: 4px;
+    color: #d4d4d4;
+    font-size: 12px;
+}
+
+.busqueda-input:focus {
+    outline: none;
+    border-color: #0e639c;
+}
+
+.tabla-content {
+    padding: 0;
+    background-color: #1e1e1e;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.tabla-table {
+    width: 100%;
+    font-size: 12px;
+    border-collapse: collapse;
+}
+
+.tabla-table th, .tabla-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+.tabla-table th {
+    background-color: #2d2d2d;
+    color: #569cd6;
+    position: sticky;
+    top: 0;
+}
+
+.simbolo-nombre {
+    font-family: 'Consolas', monospace;
+    font-weight: bold;
+    color: #ce9178;
+}
+
+.simbolo-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.badge-int, .badge-float64, .badge-string, .badge-bool {
+    background-color: #6a9955;
+    color: #1e1e1e;
+}
+
+.badge-funcion {
+    background-color: #569cd6;
+    color: #1e1e1e;
+}
+
+.badge-struct {
+    background-color: #e6a700;
+    color: #1e1e1e;
+}
+
+.badge-slice {
+    background-color: #9cdcfe;
+    color: #1e1e1e;
+}
+
+.tabla-row-int td, .tabla-row-float64 td, .tabla-row-string td, .tabla-row-bool td {
+    border-left: 2px solid #6a9955;
+}
+
+.tabla-row-funcion td {
+    border-left: 2px solid #569cd6;
+}
+
+.tabla-row-struct td {
+    border-left: 2px solid #e6a700;
+}
+
+.tabla-row-slice td {
+    border-left: 2px solid #9cdcfe;
+}
+
+.tabla-empty {
+    color: #858585;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
