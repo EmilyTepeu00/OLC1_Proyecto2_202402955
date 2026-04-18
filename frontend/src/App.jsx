@@ -15,7 +15,7 @@ function App() {
     const [code, setCode] = useState('func main() {\n\tvar x int = 10;\n\tfmt.Println(x);\n}');
     const [output, setOutput] = useState([]);
     const [errors, setErrors] = useState([]);
-    const [ast, setAst] = useState(null);
+    const [astImage, setAstImage] = useState(null);
     const [tabla, setTabla] = useState([]);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('consola');
@@ -24,7 +24,7 @@ function App() {
         setLoading(true);
         setOutput([]);
         setErrors([]);
-        setAst(null);
+        setAstImage(null);
         setTabla([]);
 
         try {
@@ -33,7 +33,7 @@ function App() {
             
             setOutput(data.consoleOutput || []);
             setErrors(data.errors || []);
-            setAst(data.ast);
+            setAstImage(data.astImage || null);
             setTabla(data.tablaSimbolos || []);
         } catch (error) {
             setErrors([{
@@ -93,7 +93,7 @@ function App() {
                         {activeTab === 'consola' && <Consola output={output} />}
                         {activeTab === 'errores' && <ErrorReporte errors={errors} />}
                         {activeTab === 'tabla' && <TablaSimbolos tabla={tabla} />}
-                        {activeTab === 'ast' && <ASTViewer ast={ast} />}
+                        {activeTab === 'ast' && <ASTViewer astImage={astImage} />}
                     </div>
                 </div>
             </div>
