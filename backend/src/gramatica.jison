@@ -79,7 +79,9 @@
 
 programa
     : lista_declaraciones
-        { $$ = { type: 'Programa', children: $1 }; }
+        { 
+            return { type: 'Programa', declaraciones: $1 }; 
+        }
     ;
 
 lista_declaraciones

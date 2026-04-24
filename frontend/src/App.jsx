@@ -1,3 +1,4 @@
+// App.jsx
 // COMPONENTE PRINCIPAL DE GoScript
 
 import React, { useState } from 'react';
@@ -15,7 +16,7 @@ function App() {
     const [code, setCode] = useState('func main() {\n\tvar x int = 10;\n\tfmt.Println(x);\n}');
     const [output, setOutput] = useState([]);
     const [errors, setErrors] = useState([]);
-    const [astImage, setAstImage] = useState(null);
+    const [ast, setAst] = useState(null);
     const [tabla, setTabla] = useState([]);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('consola');
@@ -24,7 +25,7 @@ function App() {
         setLoading(true);
         setOutput([]);
         setErrors([]);
-        setAstImage(null);
+        setAst(null);
         setTabla([]);
 
         try {
@@ -33,7 +34,7 @@ function App() {
             
             setOutput(data.consoleOutput || []);
             setErrors(data.errors || []);
-            setAstImage(data.astImage || null);
+            setAst(data.ast);
             setTabla(data.tablaSimbolos || []);
         } catch (error) {
             setErrors([{
@@ -93,7 +94,7 @@ function App() {
                         {activeTab === 'consola' && <Consola output={output} />}
                         {activeTab === 'errores' && <ErrorReporte errors={errors} />}
                         {activeTab === 'tabla' && <TablaSimbolos tabla={tabla} />}
-                        {activeTab === 'ast' && <ASTViewer astImage={astImage} />}
+                        {activeTab === 'ast' && <ASTViewer ast={ast} />}
                     </div>
                 </div>
             </div>

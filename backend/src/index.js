@@ -2,76 +2,260 @@
 
 const express = require('express');
 const cors = require('cors');
-const parser = require('./parser');
 const Evaluador = require('./evaluator');
+const parser = require('./parser');
 const graphviz = require('graphviz');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
 
 const app = express();
 const port = 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
-// Funcion para generar diagrama AST con graphviz
-function generarImagenAST(ast, outputPath) {
-    return new Promise((resolve, reject) => {
-        const g = graphviz.digraph("AST");
-        g.set("rankdir", "TB");
-        
-        let nodeCount = 0;
-        
-        function agregarNodo(padre, nodo, nombrePadre) {
-            const nodeId = `nodo_${nodeCount++}`;
-            let label = "";
-            
-            if (typeof nodo === 'object' && nodo !== null) {
-                if (nodo.type) {
-                    label = nodo.type;
-                    if (nodo.value !== undefined) label += `\\n${nodo.value}`;
-                    if (nodo.name) label += `\\n${nodo.name}`;
-                    if (nodo.operator) label += `\\n${nodo.operator}`;
-                } else {
-                    label = JSON.stringify(nodo).substring(0, 50);
-                }
-            } else {
-                label = String(nodo);
-            }
-            
-            g.addNode(nodeId, { label: label, shape: "box", style: "filled", fillcolor: "lightblue" });
-            
-            if (padre) {
-                g.addEdge(padre, nodeId);
-            }
-            
-            if (typeof nodo === 'object' && nodo !== null) {
-                if (nodo.children && Array.isArray(nodo.children)) {
-                    for (let i = 0; i < nodo.children.length; i++) {
-                        agregarNodo(nodeId, nodo.children[i], `${nombrePadre}_${i}`);
-                    }
-                } else {
-                    for (const [key, value] of Object.entries(nodo)) {
-                        if (key !== 'type' && key !== 'value' && key !== 'name' && key !== 'operator') {
-                            if (typeof value === 'object' && value !== null) {
-                                agregarNodo(nodeId, value, `${nombrePadre}_${key}`);
-                            } else if (typeof value !== 'function') {
-                                const tempNode = { type: key, value: String(value) };
-                                agregarNodo(nodeId, tempNode, `${nombrePadre}_${key}`);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        agregarNodo(null, ast, "root");
-        
-        g.output("png", outputPath, (err) => {
-            if (err) reject(err);
-            else resolve(outputPath);
+// NODOS DE RUIDO
+const NODOS_RUIDO = new Set([
+    'FUNC', 'VAR', 'IF', 'ELSE', 'FOR', 'RETURN', 'SWITCH',
+    'CASE', 'DEFAULT', 'BREAK', 'CONTINUE', 'STRUCT',
+    'PARENIZQ', 'PARENDER',
+    'LLAVEIZQ', 'LLAVEDER',
+    'CORCHIZQ', 'CORCHDER',
+    'PUNTOCOMA', 'DOSPUNTOS', 'COMA', 'PUNTO',
+    'ASIGN', 'MASIGUAL', 'MENOSIGUAL',
+    'SUMA', 'RESTA', 'MULT', 'DIV', 'MOD',
+    'IGUAL', 'DIFERENTE', 'MAYOR', 'MENOR', 'MAYORIGUAL', 'MENORIGUAL',
+    'AND', 'OR', 'NOT',
+    'INT', 'FLOAT64', 'STRING', 'BOOL', 'RUNE',
+    'TRUE', 'FALSE', 'NIL',
+    'tipo_op'
+]);
+
+// OBTENER LA ETIQUETA DEL NODO
+function getLabel(nodo, clave) {
+    if (nodo === null || nodo === undefined) return 'null';
+    if (typeof nodo !== 'object') return String(nodo).substring(0, 25);
+
+    const tipo  = nodo.type  !== undefined ? String(nodo.type)  : null;
+    const valor = nodo.value !== undefined ? String(nodo.value) : null;
+    const nombre= nodo.name  !== undefined ? String(nodo.name)  : null;
+
+    // Nodo compuesto = tiene hijos de algun tipo
+    const esNodoCompuesto = nodo.children   || nodo.sentencias  || nodo.declaraciones ||
+                            nodo.cuerpo     || nodo.body         || nodo.params        ||
+                            nodo.argumentos || nodo.izquierda    || nodo.condicion;
+
+    if (valor !== null && !esNodoCompuesto) {
+        // Literales y tokens simples -> mostrar valor real
+        if (tipo === 'ENTERO'       ) return valor;
+        if (tipo === 'FLOTANTE'     ) return valor;
+        if (tipo === 'CADENA'       ) return `"${valor}"`;
+        if (tipo === 'CARACTER'     ) return `'${valor}'`;
+        if (tipo === 'TRUE'         ) return 'true';
+        if (tipo === 'FALSE'        ) return 'false';
+        if (tipo === 'NIL'          ) return 'nil';
+        if (tipo === 'IDENTIFICADOR') return valor;
+        if (tipo === 'PARENIZQ'     ) return '(';
+        if (tipo === 'PARENDER'     ) return ')';
+        if (tipo === 'LLAVEIZQ'     ) return '{';
+        if (tipo === 'LLAVEDER'     ) return '}';
+        if (tipo === 'PUNTOCOMA'    ) return ';';
+        if (tipo === 'COMA'         ) return ',';
+        if (tipo === 'ASIGN'        ) return '=';
+        if (tipo === 'MASIGUAL'     ) return '+=';
+        if (tipo === 'MENOSIGUAL'   ) return '-=';
+        if (tipo === 'SUMA'         ) return '+';
+        if (tipo === 'RESTA'        ) return '-';
+        if (tipo === 'MULT'         ) return '*';
+        if (tipo === 'DIV'          ) return '/';
+        if (tipo === 'MOD'          ) return '%';
+        if (tipo === 'IGUAL'        ) return '==';
+        if (tipo === 'DIFERENTE'    ) return '!=';
+        if (tipo === 'MAYOR'        ) return '>';
+        if (tipo === 'MENOR'        ) return '<';
+        if (tipo === 'MAYORIGUAL'   ) return '>=';
+        if (tipo === 'MENORIGUAL'   ) return '<=';
+        if (tipo === 'AND'          ) return '&&';
+        if (tipo === 'OR'           ) return '||';
+        if (tipo === 'NOT'          ) return '!';
+        return valor.substring(0, 25);
+    }
+
+    if (tipo  ) return tipo.substring(0, 25);
+    if (nombre) return nombre.substring(0, 25);
+    return clave || '?';
+}
+
+
+// PARA DECIDIR SI UN NODO ES RUIDO
+function esRuido(nodo) {
+    if (!nodo || typeof nodo !== 'object') return false;
+    const tipo = nodo.type ? String(nodo.type) : null;
+    if (!tipo) return false;
+
+    if (NODOS_RUIDO.has(tipo)) return true;
+
+    const tieneHijos = nodo.children   || nodo.sentencias || nodo.declaraciones ||
+                       nodo.cuerpo     || nodo.body        || nodo.izquierda     ||
+                       nodo.argumentos || nodo.params;
+    if (!tieneHijos && (nodo.value === null || nodo.value === undefined || nodo.value === '')) {
+        return true;
+    }
+
+    return false;
+}
+
+// RECORRER EL AST Y CONSTRUIR EL GRAFO
+function construirGrafo(g, padreId, nodo, clave, contador) {
+    if (nodo === null || nodo === undefined) return;
+    if (esRuido(nodo)) return;
+
+    const nodeId = `n${contador.val++}`;
+    const label  = getLabel(nodo, clave);
+    const tipo   = nodo && nodo.type ? String(nodo.type) : (clave || '');
+
+    const labelVisible = label.length > 22 ? label.substring(0, 19) + '...' : label;
+
+    // Literales en elipse, nodos compuestos en rectangulo
+    const esHoja = ['ENTERO','FLOTANTE','CADENA','CARACTER',
+                    'IDENTIFICADOR','TRUE','FALSE','NIL'].includes(tipo);
+
+    g.addNode(nodeId, {
+        label:     labelVisible,
+        shape:     esHoja ? 'ellipse' : 'box',
+        style:     'filled,rounded',
+        fillcolor: 'white',
+        fontcolor: 'black',
+        color:     '#888888',
+        fontname:  'Helvetica',
+        fontsize:  '12'
+    });
+
+    if (padreId !== null) {
+        g.addEdge(padreId, nodeId, {
+            color:     '#555555',
+            arrowsize: '0.7'
         });
+    }
+
+    if (typeof nodo !== 'object') return;
+
+    // Campos semanticamente importantes en orden
+    const camposPrioritarios = [
+        'declaraciones', 'sentencias', 'children',
+        'cuerpo', 'body', 'bloque',
+        'izquierda', 'derecha', 'left', 'right',
+        'condicion', 'condition',
+        'inicializacion', 'incremento',
+        'valor', 'expresion', 'expression',
+        'params', 'parametros',
+        'argumentos', 'arguments', 'args',
+        'casos', 'cases', 'alternativo', 'consecuente',
+        'identificador'
+    ];
+
+    const yaVisitados = new Set();
+
+    for (const campo of camposPrioritarios) {
+        if (nodo[campo] === undefined || nodo[campo] === null) continue;
+        yaVisitados.add(campo);
+        const hijo = nodo[campo];
+
+        if (Array.isArray(hijo)) {
+            for (let i = 0; i < hijo.length && i < 30; i++) {
+                if (hijo[i] !== null && hijo[i] !== undefined) {
+                    if (typeof hijo[i] === 'object') {
+                        construirGrafo(g, nodeId, hijo[i], campo, contador);
+                    } else {
+                        agregarHoja(g, nodeId, String(hijo[i]).substring(0, 20), contador);
+                    }
+                }
+            }
+        } else if (typeof hijo === 'object') {
+            construirGrafo(g, nodeId, hijo, campo, contador);
+        } else {
+            agregarHoja(g, nodeId, `${campo}: ${String(hijo).substring(0, 15)}`, contador);
+        }
+    }
+
+    // Recorrer campos adicionales no visitados
+    for (const campo of Object.keys(nodo)) {
+        if (yaVisitados.has(campo))                             continue;
+        if (['type','name','value','operator'].includes(campo)) continue;
+        if (nodo[campo] === null || nodo[campo] === undefined)  continue;
+
+        const hijo = nodo[campo];
+        if (Array.isArray(hijo) && hijo.length > 0) {
+            for (let i = 0; i < hijo.length && i < 20; i++) {
+                if (hijo[i] && typeof hijo[i] === 'object') {
+                    construirGrafo(g, nodeId, hijo[i], campo, contador);
+                }
+            }
+        } else if (typeof hijo === 'object') {
+            construirGrafo(g, nodeId, hijo, campo, contador);
+        }
+    }
+}
+
+
+// AGREGAR NODO HOJA CON VALOR LITERAL
+function agregarHoja(g, padreId, texto, contador) {
+    const leafId = `n${contador.val++}`;
+    const label  = texto.length > 22 ? texto.substring(0, 19) + '...' : texto;
+
+    g.addNode(leafId, {
+        label:     label,
+        shape:     'ellipse',
+        style:     'filled',
+        fillcolor: 'white',
+        fontcolor: 'black',
+        color:     '#888888',
+        fontname:  'Helvetica',
+        fontsize:  '11'
+    });
+    g.addEdge(padreId, leafId, {
+        color:     '#888888',
+        arrowsize: '0.6',
+        style:     'dashed'
     });
 }
 
+// GENERAR LA IMAGEN DEL AST
+function generarImagenAST(astData, outputPath) {
+    return new Promise((resolve, reject) => {
+        try {
+            const g = graphviz.digraph('AST');
+
+            // Fond
+            g.set('rankdir',  'TB');
+            g.set('bgcolor',  'white');
+            g.set('fontname', 'Helvetica');
+            g.set('nodesep',  '0.6');
+            g.set('ranksep',  '0.8');
+            g.set('splines',  'ortho');
+
+            const contador = { val: 0 };
+            construirGrafo(g, null, astData, 'root', contador);
+
+            console.log(`Nodos generados en el AST: ${contador.val}`);
+
+            g.output('png', outputPath, (err) => {
+                if (err) {
+                    console.error('Error de graphviz al generar PNG:', err);
+                    reject(err);
+                } else {
+                    resolve(outputPath);
+                }
+            });
+
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+
+// ENDPOINT: POST /api/parse
 app.post('/api/parse', (req, res) => {
     const { code } = req.body;
 
@@ -79,53 +263,80 @@ app.post('/api/parse', (req, res) => {
         return res.status(400).json({ error: 'No se proporciono codigo.' });
     }
 
-    let resultado = {
-        ast: null,
-        errors: [],
+    const resultado = {
+        ast:           null,
+        errors:        [],
         consoleOutput: [],
-        tablaSimbolos: [],
-        astImage: null
+        tablaSimbolos: []
     };
 
     try {
-        // Generar AST usando el parser de Jison
         const ast = parser.parse(code);
+        console.log('AST generado correctamente');
         resultado.ast = ast;
-        
-        // Generar imagen del AST
-        const outputPath = `./ast_${Date.now()}.png`;
-        generarImagenAST(ast, outputPath).then((path) => {
-            const fs = require('fs');
-            const imageBase64 = fs.readFileSync(path, { encoding: 'base64' });
-            fs.unlinkSync(path); // Eliminar archivo temporal
-            resultado.astImage = imageBase64;
-            
-            // Ejecutar el codigo con el evaluador
-            const evaluador = new Evaluador();
-            const resultadoEjecucion = evaluador.interpretar(ast);
-            
-            resultado.consoleOutput = resultadoEjecucion.output;
-            resultado.errors = resultadoEjecucion.errors;
-            resultado.tablaSimbolos = evaluador.obtenerTablaSimbolos();
-            
-            res.json(resultado);
-        }).catch((err) => {
-            console.error("Error generando AST:", err);
-            res.json(resultado);
-        });
-        
+
+        const evaluador = new Evaluador();
+        const resultadoEjecucion = evaluador.interpretarCodigo(code);
+
+        resultado.consoleOutput = resultadoEjecucion.output;
+        resultado.errors        = resultadoEjecucion.errors;
+        resultado.tablaSimbolos = evaluador.obtenerTablaSimbolos();
+
     } catch (error) {
         resultado.errors.push({
-            type: 'Sintactico',
-            line: error.location?.first_line || 0,
-            column: error.location?.first_column || 0,
+            type:        'Sintactico',
+            line:        error.hash?.loc?.first_line   || 0,
+            column:      error.hash?.loc?.first_column || 0,
             description: error.message
         });
-        res.json(resultado);
     }
+
+    res.json(resultado);
+});
+
+// ENDPOINT: POST /api/generate-ast
+app.post('/api/generate-ast', (req, res) => {
+    const { ast } = req.body;
+
+    if (!ast) {
+        return res.status(400).json({ error: 'No hay AST para generar.' });
+    }
+
+    const timestamp     = Date.now();
+    const nombreArchivo = `AST_${timestamp}.png`;
+    const outputPath = path.join(__dirname, '..', '..', nombreArchivo);
+
+    console.log(`Generando AST en: ${outputPath}`);
+
+    generarImagenAST(ast, outputPath)
+        .then((filePath) => {
+            console.log(`AST guardado en: ${filePath}`);
+
+            // Abrir la imagen automaticameent
+            const platform = process.platform;
+            if (platform === 'win32') {
+                exec(`start "" "${filePath}"`);
+            } else if (platform === 'darwin') {
+                exec(`open "${filePath}"`);
+            } else {
+                exec(`xdg-open "${filePath}"`);
+            }
+
+            const imageBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
+            res.json({
+                image:   imageBase64,
+                savedAt: filePath
+            });
+        })
+        .catch((err) => {
+            console.error('Error generando imagen AST:', err);
+            res.status(500).json({
+                error: `Error al generar el AST: ${err.message}. Graphviz  esta instalado en el sistema?`
+            });
+        });
 });
 
 // INICIAR SERVIDOR
 app.listen(port, () => {
-    console.log(`Servidor en http://localhost:${port}`);
+    console.log(`\n🚀 Servidor GoScript corriendo en http://localhost:${port}\n`);
 });

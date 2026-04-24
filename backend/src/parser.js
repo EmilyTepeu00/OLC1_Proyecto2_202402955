@@ -84,7 +84,9 @@ performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* actio
 var $0 = $$.length - 1;
 switch (yystate) {
 case 1:
- this.$ = { type: 'Programa', children: $$[$0] }; 
+ 
+            return { type: 'Programa', declaraciones: $$[$0] }; 
+        
 break;
 case 2: case 19:
  this.$ = [$$[$0-1]].concat($$[$0]); 
