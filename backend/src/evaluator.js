@@ -240,6 +240,36 @@ class Evaluador {
             return this.ejecutarPrintln(llamada.argumentos);
         }
         
+        // strconv.Atoi: convertir string a int
+        if (llamada.nombre === 'strconv.Atoi') {
+            const resultado = this.ejecutarAtoi(llamada.argumentos);
+            return resultado;
+        }
+        
+        // strconv.ParseFloat: convertir string a un float64
+        if (llamada.nombre === 'strconv.ParseFloat') {
+            const resultado = this.ejecutarParseFloat(llamada.argumentos);
+            return resultado;
+        }
+        
+        // reflect.TypeOf: devuelve el tipo de un valor
+        if (llamada.nombre === 'reflect.TypeOf') {
+            const resultado = this.ejecutarTypeOf(llamada.argumentos);
+            return resultado;
+        }
+
+        // slices.Index: retorna el indice de la primer coincidencia
+        if (llamada.nombre === 'slices.Index') {
+            const resultado = this.ejecutarSlicesIndex(llamada.argumentos);
+            return resultado;
+        }
+        
+        // strings.Join: une todos los elementos de un slice de cadenas en una sola
+        if (llamada.nombre === 'strings.Join') {
+            const resultado = this.ejecutarStringsJoin(llamada.argumentos);
+            return resultado;
+        }
+        
         // Funcion definida por el usuario
         if (this.funciones[llamada.nombre]) {
             return this.ejecutarFuncionUsuario(llamada);
@@ -279,6 +309,231 @@ class Evaluador {
             }
         }
         return null;
+    }
+
+    // ----- FUNCIONES EMBEBIDAS -----
+
+    // CONVERTIR STRING A ENTERO (strconv.Atoi)
+    ejecutarAtoi(args) {
+        if (!args || args.length === 0) {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'strconv.Atoi requiere un argumento'
+            });
+            return null;
+        }
+
+        let valorStr = '';
+
+        // Evaluar el argumento
+        if (typeof args[0] === 'string') {
+            valorStr = args[0];
+        } else if (args[0] && typeof args[0] === 'object') {
+            if (args[0].type === 'CADENA') {
+                valorStr = args[0].value;
+            } else if (args[0].value !== undefined) {
+                valorStr = String(args[0].value);
+            } else {
+                valorStr = this.evaluarExpresion(args[0]);
+                valorStr = String(valorStr);
+            }
+        } else {
+            valorStr = String(args[0]);
+        }
+
+        // Limpiar comillas dobles o simples
+        if (valorStr.startsWith('"') && valorStr.endsWith('"')) {
+            valorStr = valorStr.slice(1, -1);
+        }
+        if (valorStr.startsWith("'") && valorStr.endsWith("'")) {
+            valorStr = valorStr.slice(1, -1);
+        }
+
+        const numero = parseInt(valorStr, 10);
+        
+        if (isNaN(numero)) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `strconv.Atoi: no se pudo convertir '${valorStr}' a entero`
+            });
+            return null;
+        }
+
+        return numero;
+    }
+
+    // CONVERTIR STRING A FLOAT64 (strconv.ParseFloat)
+    ejecutarParseFloat(args) {
+        if (!args || args.length === 0) {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'strconv.ParseFloat requiere un argumento'
+            });
+            return null;
+        }
+
+        const arg = args[0];
+        let valorStr = '';
+
+        if (typeof arg === 'object' && arg.type) {
+            valorStr = this.evaluarExpresion(arg);
+        } else if (typeof arg === 'string') {
+            valorStr = arg;
+        } else {
+            valorStr = String(arg);
+        }
+
+        if (valorStr.startsWith('"') && valorStr.endsWith('"')) {
+            valorStr = valorStr.slice(1, -1);
+        }
+
+        const numero = parseFloat(valorStr);
+        
+        if (isNaN(numero)) {
+            this.errores.push({
+                type: 'Semantico',
+                description: `strconv.ParseFloat: no se pudo convertir '${valorStr}' a float`
+            });
+            return null;
+        }
+
+        return numero;
+    }
+
+    // OBTENER EL TIPO DE UNA VARIABLE (reflect.TypeOf().string)
+    ejecutarTypeOf(args) {
+        if (!args || args.length === 0) {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'reflect.TypeOf requiere un argumento'
+            });
+            return null;
+        }
+
+        const arg = args[0];
+        let valor = null;
+
+        if (typeof arg === 'object' && arg.type) {
+            valor = this.evaluarExpresion(arg);
+        } else {
+            valor = arg;
+        }
+
+        // Determinar el tipo del valor
+        if (valor === null) return 'nil';
+        if (typeof valor === 'boolean') return 'bool';
+        if (typeof valor === 'number') {
+            if (Number.isInteger(valor)) return 'int';
+            return 'float64';
+        }
+        if (typeof valor === 'string') return 'string';
+        if (typeof valor === 'object') {
+            if (valor.tipo === 'slice') return '[]' + valor.tipoElemento;
+            if (valor.tipo === 'struct') return valor.nombreStruct;
+            return 'object';
+        }
+
+        return typeof valor;
+    }
+
+    // RETORNAR EL INDICE DE LA PRIMERA COINCIDENCIA (slices.Index)
+    ejecutarSlicesIndex(args) {
+        if (!args || args.length < 2) {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'slices.Index requiere un slice y un valor'
+            });
+            return -1;
+        }
+
+        const sliceArg = args[0];
+        const valorArg = args[1];
+        
+        let slice = null;
+        let valorBuscado = null;
+
+        // Obtener el slice
+        if (typeof sliceArg === 'object' && sliceArg.tipo === 'slice') {
+            slice = sliceArg;
+        } else if (typeof sliceArg === 'string' && this.ambitoActual[sliceArg]) {
+            slice = this.ambitoActual[sliceArg].valor;
+        } else {
+            slice = sliceArg;
+        }
+
+        // Obtener el valor a buscar
+        if (typeof valorArg === 'object') {
+            valorBuscado = this.evaluarExpresion(valorArg);
+        } else if (this.ambitoActual[valorArg]) {
+            valorBuscado = this.ambitoActual[valorArg].valor;
+        } else {
+            valorBuscado = valorArg;
+        }
+
+        if (!slice || slice.tipo !== 'slice') {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'slices.Index: el primer argumento debe ser un slice'
+            });
+            return -1;
+        }
+
+        for (let i = 0; i < slice.elementos.length; i++) {
+            if (slice.elementos[i] === valorBuscado) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // UNE SLICE DE STRINGS CON UN SEPARADOR (strings.Join)
+    ejecutarStringsJoin(args) {
+        if (!args || args.length < 2) {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'strings.Join requiere un slice de strings y un separador'
+            });
+            return '';
+        }
+
+        const sliceArg = args[0];
+        const separadorArg = args[1];
+        
+        let slice = null;
+        let separador = '';
+
+        // Obtener el slice
+        if (typeof sliceArg === 'object' && sliceArg.tipo === 'slice') {
+            slice = sliceArg;
+        } else if (typeof sliceArg === 'string' && this.ambitoActual[sliceArg]) {
+            slice = this.ambitoActual[sliceArg].valor;
+        }
+
+        // Obtener el separador
+        if (typeof separadorArg === 'object') {
+            separador = String(this.evaluarExpresion(separadorArg));
+        } else if (this.ambitoActual[separadorArg]) {
+            separador = String(this.ambitoActual[separadorArg].valor);
+        } else {
+            separador = String(separadorArg);
+        }
+
+        // Limpiar comillas
+        if (separador.startsWith('"') && separador.endsWith('"')) {
+            separador = separador.slice(1, -1);
+        }
+
+        if (!slice || slice.tipo !== 'slice') {
+            this.errores.push({
+                type: 'Semantico',
+                description: 'strings.Join: el primer argumento debe ser un slice de strings'
+            });
+            return '';
+        }
+
+        const elementosStr = slice.elementos.map(e => String(e));
+        return elementosStr.join(separador);
     }
 
 
@@ -1290,6 +1545,69 @@ class Evaluador {
             const slice = variable ? variable.valor : null;
             const tamaño = this.funcionLen(slice);
             this.ambitoActual[varDestino] = { valor: tamaño, tipo: 'int' };
+            return;
+        }
+
+        // FUNCION strconv.Atoi: num := strconv.Atoi("123")
+        const atoiAsignacionMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*strconv\.Atoi\s*\(\s*["']?([^"')]+)["']?\s*\)/);
+        if (atoiAsignacionMatch) {
+            const varNombre = atoiAsignacionMatch[1];
+            let argsStr = atoiAsignacionMatch[2];
+            // Limpiar comillas
+            argsStr = argsStr.replace(/^["']|["']$/g, '');
+            const args = [argsStr];
+            const resultado = this.ejecutarAtoi(args);
+            this.ambitoActual[varNombre] = { valor: resultado, tipo: 'int' };
+            return;
+        }
+
+        // FUNCION strconv.ParseFloat: decimal := strconv.ParseFloat("123.45")
+        const parseFloatAsignacionMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*strconv\.ParseFloat\s*\(\s*([^)]+)\s*\)/);
+        if (parseFloatAsignacionMatch) {
+            const varNombre = parseFloatAsignacionMatch[1];
+            const argsStr = parseFloatAsignacionMatch[2];
+            const args = [argsStr.trim()];
+            const resultado = this.ejecutarParseFloat(args);
+            this.ambitoActual[varNombre] = { valor: resultado, tipo: 'float64' };
+            return;
+        }
+
+        // FUNCION reflect.TypeOf: tipo := reflect.TypeOf(x)
+        const typeOfAsignacionMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*reflect\.TypeOf\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)/);
+        if (typeOfAsignacionMatch) {
+            const varNombre = typeOfAsignacionMatch[1];
+            const argsStr = typeOfAsignacionMatch[2];
+            const args = [argsStr.trim()];
+            const resultado = this.ejecutarTypeOf(args);
+            this.ambitoActual[varNombre] = { valor: resultado, tipo: 'string' };
+            return;
+        }
+
+        // FUNCION slices.Index: indice := slices.Index(numeros, 3)
+        const slicesIndexMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*slices\.Index\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*(.+)\s*\)/);
+        if (slicesIndexMatch) {
+            const varNombre = slicesIndexMatch[1];
+            const sliceName = slicesIndexMatch[2];
+            const valor = slicesIndexMatch[3].trim();
+            const sliceVar = this.ambitoActual[sliceName];
+            const slice = sliceVar ? sliceVar.valor : null;
+            const args = [slice, valor];
+            const resultado = this.ejecutarSlicesIndex(args);
+            this.ambitoActual[varNombre] = { valor: resultado, tipo: 'int' };
+            return;
+        }
+
+        // FUNCION strings.Join: resultado := strings.Join(palabras, " ")
+        const stringsJoinMatch = linea.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:=\s*strings\.Join\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*(.+)\s*\)/);
+        if (stringsJoinMatch) {
+            const varNombre = stringsJoinMatch[1];
+            const sliceName = stringsJoinMatch[2];
+            const separador = stringsJoinMatch[3].trim();
+            const sliceVar = this.ambitoActual[sliceName];
+            const slice = sliceVar ? sliceVar.valor : null;
+            const args = [slice, separador];
+            const resultado = this.ejecutarStringsJoin(args);
+            this.ambitoActual[varNombre] = { valor: resultado, tipo: 'string' };
             return;
         }
 
