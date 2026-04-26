@@ -32,6 +32,13 @@ const NODOS_RUIDO = new Set([
     'tipo_op'
 ]);
 
+// PALABRAS RESERVADAS PARA LA TABLA DE SIMBOLOS
+const PALABRAS_RESERVADAS = [
+    'func', 'var', 'if', 'else', 'for', 'return', 'switch', 'case', 'default',
+    'break', 'continue', 'struct', 'true', 'false', 'nil', 'int', 'float64',
+    'string', 'bool', 'rune'
+];
+
 // OBTENER LA ETIQUETA DEL NODO
 function getLabel(nodo, clave) {
     if (nodo === null || nodo === undefined) return 'null';
@@ -255,6 +262,223 @@ function generarImagenAST(astData, outputPath) {
     });
 }
 
+// ANALIZAR TODOS LOS TOKENS Y GENERAR TABLA DE SIMBOLOS
+function analizarTokens(codigo) {
+    const tokens = [];
+    let lineNum = 1;
+    let columnNum = 1;
+    
+    const lines = codigo.split('\n');
+    
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        const line = lines[lineIdx];
+        lineNum = lineIdx + 1;
+        columnNum = 1;
+        
+        let j = 0;
+        while (j < line.length) {
+            const char = line[j];
+            
+            // Espacios en blanco (se ignoran)
+            if (char === ' ' || char === '\t') {
+                columnNum++;
+                j++;
+                continue;
+            }
+            
+            // Palabras reservadas e identificadores
+            if (/[a-zA-Z_]/.test(char)) {
+                let palabra = '';
+                while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) {
+                    palabra += line[j];
+                    j++;
+                }
+                
+                let tipo = 'Identificador';
+                if (PALABRAS_RESERVADAS.includes(palabra)) {
+                    tipo = 'Palabra Reservada';
+                }
+                
+                tokens.push({
+                    token: palabra,
+                    tipo: tipo,
+                    linea: lineNum,
+                    columna: columnNum,
+                    valor: palabra
+                });
+                
+                columnNum += palabra.length;
+                continue;
+            }
+            
+            // Numeros enteros y decimales
+            if (/[0-9]/.test(char)) {
+                let numero = '';
+                let esDecimal = false;
+                while (j < line.length && /[0-9.]/.test(line[j])) {
+                    if (line[j] === '.') esDecimal = true;
+                    numero += line[j];
+                    j++;
+                }
+                
+                tokens.push({
+                    token: numero,
+                    tipo: esDecimal ? 'Literal Float' : 'Literal Entero',
+                    linea: lineNum,
+                    columna: columnNum,
+                    valor: numero
+                });
+                
+                columnNum += numero.length;
+                continue;
+            }
+            
+            // Literales string (entre comillas dobles)
+            if (char === '"') {
+                let cadena = '"';
+                j++;
+                columnNum++;
+                while (j < line.length && line[j] !== '"') {
+                    cadena += line[j];
+                    j++;
+                    columnNum++;
+                }
+                if (j < line.length && line[j] === '"') {
+                    cadena += '"';
+                    j++;
+                    columnNum++;
+                }
+                
+                tokens.push({
+                    token: cadena,
+                    tipo: 'Literal String',
+                    linea: lineNum,
+                    columna: columnNum - cadena.length,
+                    valor: cadena.slice(1, -1)
+                });
+                continue;
+            }
+            
+            // Literales rune (entre comillas simples)
+            if (char === "'") {
+                let caracter = "'";
+                j++;
+                columnNum++;
+                while (j < line.length && line[j] !== "'") {
+                    caracter += line[j];
+                    j++;
+                    columnNum++;
+                }
+                if (j < line.length && line[j] === "'") {
+                    caracter += "'";
+                    j++;
+                    columnNum++;
+                }
+                
+                tokens.push({
+                    token: caracter,
+                    tipo: 'Literal Rune',
+                    linea: lineNum,
+                    columna: columnNum - caracter.length,
+                    valor: caracter.slice(1, -1)
+                });
+                continue;
+            }
+            
+            // Operadores de dos caracteres
+            const dosCaracteres = line.substring(j, j + 2);
+            if (dosCaracteres === '==' || dosCaracteres === '!=' || dosCaracteres === '>=' ||
+                dosCaracteres === '<=' || dosCaracteres === '&&' || dosCaracteres === '||' ||
+                dosCaracteres === '+=' || dosCaracteres === '-=' || dosCaracteres === ':=') {
+                
+                tokens.push({
+                    token: dosCaracteres,
+                    tipo: 'Operador',
+                    linea: lineNum,
+                    columna: columnNum,
+                    valor: dosCaracteres
+                });
+                j += 2;
+                columnNum += 2;
+                continue;
+            }
+            
+            // Operadores de un caracter y signos
+            const operadores = ['+', '-', '*', '/', '%', '=', '<', '>', '!', '&', '|', '(', ')', '{', '}', '[', ']', ',', ';', ':', '.'];
+            if (operadores.includes(char)) {
+                let tipo = 'Operador';
+                if (char === '(' || char === ')' || char === '{' || char === '}' || char === '[' || char === ']') {
+                    tipo = 'Signo Agrupacion';
+                } else if (char === ',' || char === ';') {
+                    tipo = 'Separador';
+                } else if (char === ':') {
+                    tipo = 'Dospuntos';
+                }
+                
+                tokens.push({
+                    token: char,
+                    tipo: tipo,
+                    linea: lineNum,
+                    columna: columnNum,
+                    valor: char
+                });
+                j++;
+                columnNum++;
+                continue;
+            }
+            
+            // Comentarios de una linea (//)
+            if (char === '/' && line[j + 1] === '/') {
+                tokens.push({
+                    token: line.substring(j),
+                    tipo: 'Comentario',
+                    linea: lineNum,
+                    columna: columnNum,
+                    valor: line.substring(j)
+                });
+                break;
+            }
+            
+            // Comentarios multilinea (/* */)
+            if (char === '/' && line[j + 1] === '*') {
+                let comentario = '';
+                while (j < line.length && !(line[j] === '*' && line[j + 1] === '/')) {
+                    comentario += line[j];
+                    j++;
+                    columnNum++;
+                }
+                if (j + 1 < line.length) {
+                    comentario += '*/';
+                    j += 2;
+                    columnNum += 2;
+                }
+                tokens.push({
+                    token: comentario,
+                    tipo: 'Comentario',
+                    linea: lineNum,
+                    columna: columnNum - comentario.length,
+                    valor: comentario
+                });
+                continue;
+            }
+            
+            // Caracter no reconocido (error lexico)
+            tokens.push({
+                token: char,
+                tipo: 'Error Lexico',
+                linea: lineNum,
+                columna: columnNum,
+                valor: char,
+                error: true
+            });
+            j++;
+            columnNum++;
+        }
+    }
+    
+    return tokens;
+}
+
 // ENDPOINT: POST /api/parse
 app.post('/api/parse', (req, res) => {
     const { code } = req.body;
@@ -280,7 +504,18 @@ app.post('/api/parse', (req, res) => {
 
         resultado.consoleOutput = resultadoEjecucion.output;
         resultado.errors        = resultadoEjecucion.errors;
-        resultado.tablaSimbolos = evaluador.obtenerTablaSimbolos();
+        
+        // Generar tabla de simbolos completa a partir de los tokens
+        const tokens = analizarTokens(code);
+        const tablaSimbolos = tokens.map(token => ({
+            nombre: token.token,
+            tipo: token.tipo,
+            ambito: 'global',
+            valor: token.valor || token.token,
+            linea: token.linea,
+            columna: token.columna
+        }));
+        resultado.tablaSimbolos = tablaSimbolos;
 
     } catch (error) {
         resultado.errors.push({
@@ -312,7 +547,7 @@ app.post('/api/generate-ast', (req, res) => {
         .then((filePath) => {
             console.log(`AST guardado en: ${filePath}`);
 
-            // Abrir la imagen automaticameent
+            // Abrir la imagen automaticamente
             const platform = process.platform;
             if (platform === 'win32') {
                 exec(`start "" "${filePath}"`);
@@ -331,12 +566,12 @@ app.post('/api/generate-ast', (req, res) => {
         .catch((err) => {
             console.error('Error generando imagen AST:', err);
             res.status(500).json({
-                error: `Error al generar el AST: ${err.message}. Graphviz  esta instalado en el sistema?`
+                error: `Error al generar el AST: ${err.message}. Graphviz esta instalado en el sistema?`
             });
         });
 });
 
 // INICIAR SERVIDOR
 app.listen(port, () => {
-    console.log(`\n🚀 Servidor GoScript corriendo en http://localhost:${port}\n`);
+    console.log(`\nServidor GoScript corriendo en http://localhost:${port}\n`);
 });
